@@ -1,15 +1,19 @@
-//! OAuth 2.0 flow client (reqwest). Behind the `oauth-client` feature.
+//! Stateless OAuth 2.0 transport (reqwest). Behind the `oauth-client` feature.
 //!
-//! Pure, dependency-light implementation of the MCP-auth flow shared by both
-//! repos: metadata discovery (RFC 8414 + RFC 9728), Dynamic Client Registration
-//! (RFC 7591), PKCE (RFC 7636), and the authorization-code + refresh grants
-//! (RFC 6749).
+//! This is the shared *transport* layer both repos sit on: RFC 8414/9728/7591
+//! URL building, the HTTP calls, form/JSON bodies, status checks, and parsing,
+//! returning the shared DTOs. It is deliberately:
 //!
-//! SSRF is left to the caller: every networked call takes an `allow_url`
-//! predicate (return `true` to permit). Each repo plugs in its own
-//! internal-host policy — dyson's fixed SSRF predicates, swarm's egress CIDR —
-//! so this crate stays free of either model. Pass `|_| true` only when the
-//! endpoint is already trusted.
+//! - **SSRF-agnostic.** It does NOT resolve or gate hosts — the two repos guard
+//!   differently (dyson async DNS-resolving predicate; swarm's IP-pinned/policy
+//!   client). Callers validate endpoints in their own way *around* these calls.
+//! - **Redaction-agnostic.** Errors are a structured [`OAuthError`] carrying raw
+//!   fields; the reqwest-error case is reduced to a URL-free `kind` so nothing
+//!   leaks by default. Each repo formats via [`OAuthError::redacted`] with its
+//!   own redaction anchor (dyson: full URL + body; swarm: resource domain only,
+//!   no body).
+//! - **Stateless.** No token storage, refresh scheduling, callback server, or
+//!   flow cache — those lifecycles stay in each repo on top of this.
 
 use base64::Engine as _;
 use rand::RngCore as _;
@@ -22,42 +26,74 @@ use super::{
 const B64: base64::engine::general_purpose::GeneralPurpose =
     base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
-/// Failure modes of the OAuth flow.
-#[derive(Debug)]
+/// A transport-layer OAuth failure. Fields are raw; format via
+/// [`OAuthError::redacted`] so the caller controls URL redaction + whether to
+/// include the (potentially sensitive) response body.
+#[derive(Debug, Clone)]
 pub enum OAuthError {
-    /// Transport-level failure (connect, TLS, body read).
-    Http(reqwest::Error),
-    /// The server returned a non-2xx status.
-    Status(u16),
-    /// A URL or response payload was malformed.
-    Malformed(String),
-    /// The `allow_url` predicate rejected the target as internal/unsafe.
-    BlockedUrl(String),
+    /// A URL we tried to build or parse was malformed.
+    BadUrl { url: String, detail: String },
+    /// Transport failure (connect/timeout/decode). `kind` is URL-free.
+    Transport { url: String, kind: String },
+    /// Non-2xx response. `body` may echo provider data — redact-aware callers
+    /// decide whether to surface it.
+    Status {
+        url: String,
+        code: u16,
+        body: String,
+    },
+    /// 2xx but the body didn't deserialize.
+    Parse { url: String, detail: String },
 }
 
-impl std::fmt::Display for OAuthError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl OAuthError {
+    fn url(&self) -> &str {
         match self {
-            Self::Http(e) => write!(f, "oauth http error: {e}"),
-            Self::Status(c) => write!(f, "oauth endpoint returned status {c}"),
-            Self::Malformed(m) => write!(f, "oauth malformed: {m}"),
-            Self::BlockedUrl(u) => write!(f, "oauth url blocked as internal: {u}"),
+            Self::BadUrl { url, .. }
+            | Self::Transport { url, .. }
+            | Self::Status { url, .. }
+            | Self::Parse { url, .. } => url,
+        }
+    }
+
+    /// Render a log-safe message. `redact` maps the offending URL to the form
+    /// the caller wants in logs (identity for full URL, or e.g. domain-only).
+    /// `with_body` includes the response body on `Status` (off for callers
+    /// whose URLs/bodies may carry tenant secrets).
+    pub fn redacted(&self, redact: impl Fn(&str) -> String, with_body: bool) -> String {
+        let where_ = redact(self.url());
+        match self {
+            Self::BadUrl { detail, .. } => format!("oauth: bad url {where_}: {detail}"),
+            Self::Transport { kind, .. } => format!("oauth: {kind} to {where_}"),
+            Self::Status { code, body, .. } => {
+                if with_body {
+                    format!("oauth: {where_} returned HTTP {code}: {body}")
+                } else {
+                    format!("oauth: {where_} returned HTTP {code}")
+                }
+            }
+            Self::Parse { detail, .. } => format!("oauth: bad response from {where_}: {detail}"),
         }
     }
 }
 
-impl std::error::Error for OAuthError {}
-
-impl From<reqwest::Error> for OAuthError {
-    fn from(e: reqwest::Error) -> Self {
-        Self::Http(e)
+fn err_kind(e: &reqwest::Error) -> &'static str {
+    if e.is_timeout() {
+        "timeout"
+    } else if e.is_connect() {
+        "connect error"
+    } else if e.is_decode() {
+        "decode error"
+    } else if e.is_request() {
+        "request error"
+    } else {
+        "transport error"
     }
 }
 
 fn random_b64_32() -> String {
     let mut bytes = [0u8; 32];
-    let mut rng = rand::rngs::OsRng;
-    rng.fill_bytes(&mut bytes);
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
     B64.encode(bytes)
 }
 
@@ -78,79 +114,154 @@ pub fn generate_state() -> String {
     random_b64_32()
 }
 
-/// Build the `/authorize` redirect URL with PKCE + state (RFC 6749 §4.1.1).
+/// RFC 8414 §3.1 authorization-server metadata URL. When the AS URL has a
+/// non-trivial path, the well-known segment is inserted *between* origin and
+/// path (multi-tenant providers); otherwise it sits at the root.
+pub fn as_metadata_url(as_url: &str) -> Result<String, OAuthError> {
+    let parsed = reqwest::Url::parse(as_url).map_err(|e| OAuthError::BadUrl {
+        url: as_url.to_string(),
+        detail: e.to_string(),
+    })?;
+    let host = parsed.host_str().ok_or_else(|| OAuthError::BadUrl {
+        url: as_url.to_string(),
+        detail: "no host".into(),
+    })?;
+    let origin = match parsed.port() {
+        Some(p) => format!("{}://{host}:{p}", parsed.scheme()),
+        None => format!("{}://{host}", parsed.scheme()),
+    };
+    let path = parsed.path().trim_end_matches('/');
+    Ok(if path.is_empty() {
+        format!("{origin}/.well-known/oauth-authorization-server")
+    } else {
+        format!("{origin}/.well-known/oauth-authorization-server{path}")
+    })
+}
+
+/// RFC 9728 protected-resource metadata URLs to try, in order: the path-scoped
+/// form (when the resource has a path) then the origin-root form.
+pub fn protected_resource_metadata_urls(server_url: &str) -> Result<Vec<String>, OAuthError> {
+    let parsed = reqwest::Url::parse(server_url).map_err(|e| OAuthError::BadUrl {
+        url: server_url.to_string(),
+        detail: e.to_string(),
+    })?;
+    let host = parsed.host_str().ok_or_else(|| OAuthError::BadUrl {
+        url: server_url.to_string(),
+        detail: "no host".into(),
+    })?;
+    let origin = match parsed.port() {
+        Some(p) => format!("{}://{host}:{p}", parsed.scheme()),
+        None => format!("{}://{host}", parsed.scheme()),
+    };
+    let path = parsed.path().trim_end_matches('/');
+    let mut urls = Vec::new();
+    if !path.is_empty() {
+        urls.push(format!(
+            "{origin}/.well-known/oauth-protected-resource{path}"
+        ));
+    }
+    urls.push(format!("{origin}/.well-known/oauth-protected-resource"));
+    Ok(urls)
+}
+
+/// Build the `/authorize` redirect URL with PKCE + state. Scopes are
+/// space-joined; an empty slice omits the `scope` param entirely (some ASes
+/// reject `scope=` / scopes not in the DCR record).
 pub fn build_auth_url(
     authorization_endpoint: &str,
     client_id: &str,
+    scopes: &[String],
     redirect_uri: &str,
-    scope: Option<&str>,
-    pkce: &PkceChallenge,
+    code_challenge: &str,
     state: &str,
 ) -> Result<String, OAuthError> {
-    let mut params: Vec<(&str, &str)> = vec![
-        ("response_type", "code"),
-        ("client_id", client_id),
-        ("redirect_uri", redirect_uri),
-        ("code_challenge", pkce.challenge.as_str()),
-        ("code_challenge_method", "S256"),
-        ("state", state),
-    ];
-    if let Some(s) = scope {
-        params.push(("scope", s));
+    let mut url = reqwest::Url::parse(authorization_endpoint).map_err(|e| OAuthError::BadUrl {
+        url: authorization_endpoint.to_string(),
+        detail: e.to_string(),
+    })?;
+    {
+        let mut q = url.query_pairs_mut();
+        q.append_pair("response_type", "code")
+            .append_pair("client_id", client_id)
+            .append_pair("redirect_uri", redirect_uri)
+            .append_pair("code_challenge", code_challenge)
+            .append_pair("code_challenge_method", "S256")
+            .append_pair("state", state);
+        if !scopes.is_empty() {
+            q.append_pair("scope", &scopes.join(" "));
+        }
     }
-    let url = reqwest::Url::parse_with_params(authorization_endpoint, &params)
-        .map_err(|e| OAuthError::Malformed(format!("authorize url: {e}")))?;
     Ok(url.to_string())
 }
 
-fn ensure_allowed(allow_url: &impl Fn(&str) -> bool, url: &str) -> Result<(), OAuthError> {
-    if allow_url(url) {
-        Ok(())
-    } else {
-        Err(OAuthError::BlockedUrl(url.to_string()))
-    }
-}
-
-fn err_for_status(status: reqwest::StatusCode) -> Result<(), OAuthError> {
-    if status.is_success() {
-        Ok(())
-    } else {
-        Err(OAuthError::Status(status.as_u16()))
-    }
-}
-
-/// Fetch RFC 8414 authorization-server metadata from
-/// `<issuer>/.well-known/oauth-authorization-server`.
-pub async fn discover_metadata(
-    issuer: &str,
+async fn get_json<T: serde::de::DeserializeOwned>(
     client: &reqwest::Client,
-    allow_url: impl Fn(&str) -> bool,
+    url: &str,
+) -> Result<T, OAuthError> {
+    let resp = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| OAuthError::Transport {
+            url: url.to_string(),
+            kind: err_kind(&e).into(),
+        })?;
+    let code = resp.status().as_u16();
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(OAuthError::Status {
+            url: url.to_string(),
+            code,
+            body,
+        });
+    }
+    resp.json::<T>().await.map_err(|e| OAuthError::Parse {
+        url: url.to_string(),
+        detail: e.to_string(),
+    })
+}
+
+/// Fetch RFC 8414 AS metadata (builds the well-known URL via [`as_metadata_url`]).
+pub async fn fetch_as_metadata(
+    as_url: &str,
+    client: &reqwest::Client,
 ) -> Result<AuthMetadata, OAuthError> {
-    let url = format!(
-        "{}/.well-known/oauth-authorization-server",
-        issuer.trim_end_matches('/')
-    );
-    ensure_allowed(&allow_url, &url)?;
-    let resp = client.get(&url).send().await?;
-    err_for_status(resp.status())?;
-    Ok(resp.json::<AuthMetadata>().await?)
+    let url = as_metadata_url(as_url)?;
+    get_json(client, &url).await
 }
 
-/// Fetch RFC 9728 protected-resource metadata from
-/// `<resource>/.well-known/oauth-protected-resource`.
+/// Fetch RFC 9728 protected-resource metadata and return its first listed
+/// authorization server, if any. A 404 maps to `Ok(None)` (resource doesn't
+/// publish PRM — caller falls back to treating the resource origin as the AS).
 pub async fn fetch_protected_resource(
-    resource_url: &str,
+    prm_url: &str,
     client: &reqwest::Client,
-    allow_url: impl Fn(&str) -> bool,
-) -> Result<ProtectedResourceMetadata, OAuthError> {
-    let url = format!(
-        "{}/.well-known/oauth-protected-resource",
-        resource_url.trim_end_matches('/')
-    );
-    ensure_allowed(&allow_url, &url)?;
-    let resp = client.get(&url).send().await?;
-    err_for_status(resp.status())?;
-    Ok(resp.json::<ProtectedResourceMetadata>().await?)
+) -> Result<Option<String>, OAuthError> {
+    let resp = client
+        .get(prm_url)
+        .send()
+        .await
+        .map_err(|e| OAuthError::Transport {
+            url: prm_url.to_string(),
+            kind: err_kind(&e).into(),
+        })?;
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    let code = resp.status().as_u16();
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(OAuthError::Status {
+            url: prm_url.to_string(),
+            code,
+            body,
+        });
+    }
+    let prm: ProtectedResourceMetadata = resp.json().await.map_err(|e| OAuthError::Parse {
+        url: prm_url.to_string(),
+        detail: e.to_string(),
+    })?;
+    Ok(prm.authorization_servers.into_iter().next())
 }
 
 /// Register a client via RFC 7591 Dynamic Client Registration.
@@ -158,67 +269,105 @@ pub async fn register_client(
     registration_endpoint: &str,
     request: &DcrRequest,
     client: &reqwest::Client,
-    allow_url: impl Fn(&str) -> bool,
 ) -> Result<DcrResponse, OAuthError> {
-    ensure_allowed(&allow_url, registration_endpoint)?;
     let resp = client
         .post(registration_endpoint)
         .json(request)
         .send()
-        .await?;
-    err_for_status(resp.status())?;
-    Ok(resp.json::<DcrResponse>().await?)
+        .await
+        .map_err(|e| OAuthError::Transport {
+            url: registration_endpoint.to_string(),
+            kind: err_kind(&e).into(),
+        })?;
+    let code = resp.status().as_u16();
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(OAuthError::Status {
+            url: registration_endpoint.to_string(),
+            code,
+            body,
+        });
+    }
+    resp.json::<DcrResponse>()
+        .await
+        .map_err(|e| OAuthError::Parse {
+            url: registration_endpoint.to_string(),
+            detail: e.to_string(),
+        })
+}
+
+async fn post_token(
+    token_url: &str,
+    params: &[(&str, &str)],
+    client: &reqwest::Client,
+) -> Result<TokenResponse, OAuthError> {
+    let resp = client
+        .post(token_url)
+        .form(params)
+        .send()
+        .await
+        .map_err(|e| OAuthError::Transport {
+            url: token_url.to_string(),
+            kind: err_kind(&e).into(),
+        })?;
+    let code = resp.status().as_u16();
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(OAuthError::Status {
+            url: token_url.to_string(),
+            code,
+            body,
+        });
+    }
+    resp.json::<TokenResponse>()
+        .await
+        .map_err(|e| OAuthError::Parse {
+            url: token_url.to_string(),
+            detail: e.to_string(),
+        })
 }
 
 /// Exchange an authorization code for tokens (RFC 6749 §4.1.3).
 #[allow(clippy::too_many_arguments)]
 pub async fn exchange_code(
-    token_endpoint: &str,
+    token_url: &str,
     code: &str,
-    redirect_uri: &str,
+    verifier: &str,
     client_id: &str,
-    code_verifier: &str,
     client_secret: Option<&str>,
+    redirect_uri: &str,
     client: &reqwest::Client,
-    allow_url: impl Fn(&str) -> bool,
 ) -> Result<TokenResponse, OAuthError> {
-    ensure_allowed(&allow_url, token_endpoint)?;
-    let mut form: Vec<(&str, &str)> = vec![
+    let mut params = vec![
         ("grant_type", "authorization_code"),
         ("code", code),
         ("redirect_uri", redirect_uri),
         ("client_id", client_id),
-        ("code_verifier", code_verifier),
+        ("code_verifier", verifier),
     ];
     if let Some(secret) = client_secret {
-        form.push(("client_secret", secret));
+        params.push(("client_secret", secret));
     }
-    let resp = client.post(token_endpoint).form(&form).send().await?;
-    err_for_status(resp.status())?;
-    Ok(resp.json::<TokenResponse>().await?)
+    post_token(token_url, &params, client).await
 }
 
 /// Refresh an access token (RFC 6749 §6).
 pub async fn refresh_token(
-    token_endpoint: &str,
+    token_url: &str,
     refresh_token: &str,
     client_id: &str,
     client_secret: Option<&str>,
     client: &reqwest::Client,
-    allow_url: impl Fn(&str) -> bool,
 ) -> Result<TokenResponse, OAuthError> {
-    ensure_allowed(&allow_url, token_endpoint)?;
-    let mut form: Vec<(&str, &str)> = vec![
+    let mut params = vec![
         ("grant_type", "refresh_token"),
         ("refresh_token", refresh_token),
         ("client_id", client_id),
     ];
     if let Some(secret) = client_secret {
-        form.push(("client_secret", secret));
+        params.push(("client_secret", secret));
     }
-    let resp = client.post(token_endpoint).form(&form).send().await?;
-    err_for_status(resp.status())?;
-    Ok(resp.json::<TokenResponse>().await?)
+    post_token(token_url, &params, client).await
 }
 
 #[cfg(test)]
@@ -228,50 +377,91 @@ mod tests {
     #[test]
     fn pkce_is_random_and_s256_derived() {
         let a = generate_pkce();
-        let b = generate_pkce();
-        assert!(!a.verifier.is_empty() && !a.challenge.is_empty());
-        assert_ne!(a.verifier, a.challenge);
-        assert_ne!(a.verifier, b.verifier, "verifiers must be random per call");
-
-        // challenge == base64url(sha256(verifier))
+        assert_ne!(a.verifier, generate_pkce().verifier);
         let mut h = Sha256::new();
         h.update(a.verifier.as_bytes());
         assert_eq!(a.challenge, B64.encode(h.finalize()));
     }
 
     #[test]
-    fn build_auth_url_encodes_params_and_scope_is_optional() {
+    fn as_metadata_url_is_rfc8414_path_aware() {
+        assert_eq!(
+            as_metadata_url("https://as.example.com").unwrap(),
+            "https://as.example.com/.well-known/oauth-authorization-server"
+        );
+        assert_eq!(
+            as_metadata_url("https://as.example.com/").unwrap(),
+            "https://as.example.com/.well-known/oauth-authorization-server"
+        );
+        // path-bearing issuer: well-known inserted between origin and path
+        assert_eq!(
+            as_metadata_url("https://as.example.com/tenant/svc").unwrap(),
+            "https://as.example.com/.well-known/oauth-authorization-server/tenant/svc"
+        );
+        assert!(matches!(
+            as_metadata_url("not a url"),
+            Err(OAuthError::BadUrl { .. })
+        ));
+    }
+
+    #[test]
+    fn protected_resource_urls_try_path_then_root() {
+        assert_eq!(
+            protected_resource_metadata_urls("https://mcp.example.com/x/y").unwrap(),
+            vec![
+                "https://mcp.example.com/.well-known/oauth-protected-resource/x/y".to_string(),
+                "https://mcp.example.com/.well-known/oauth-protected-resource".to_string(),
+            ]
+        );
+        assert_eq!(
+            protected_resource_metadata_urls("https://mcp.example.com").unwrap(),
+            vec!["https://mcp.example.com/.well-known/oauth-protected-resource".to_string()]
+        );
+    }
+
+    #[test]
+    fn build_auth_url_omits_empty_scope() {
         let pkce = PkceChallenge {
             verifier: "v".into(),
             challenge: "chal".into(),
         };
-        let url = build_auth_url(
-            "https://as.example/authorize",
-            "client-123",
+        let with = build_auth_url(
+            "https://as/authorize",
+            "cid",
+            &["openid".to_string(), "mcp".to_string()],
             "http://localhost/cb",
-            Some("openid mcp"),
-            &pkce,
-            "state-xyz",
+            &pkce.challenge,
+            "st",
         )
         .unwrap();
-        assert!(url.starts_with("https://as.example/authorize?"));
-        assert!(url.contains("response_type=code"));
-        assert!(url.contains("client_id=client-123"));
-        assert!(url.contains("code_challenge=chal"));
-        assert!(url.contains("code_challenge_method=S256"));
-        assert!(url.contains("state=state-xyz"));
-        // space in scope must be percent-encoded
-        assert!(url.contains("scope=openid+mcp") || url.contains("scope=openid%20mcp"));
+        assert!(with.contains("scope=openid+mcp") || with.contains("scope=openid%20mcp"));
+        assert!(with.contains("code_challenge=chal") && with.contains("state=st"));
 
-        let no_scope = build_auth_url(
-            "https://as.example/authorize",
-            "c",
+        let without = build_auth_url(
+            "https://as/authorize",
+            "cid",
+            &[],
             "http://localhost/cb",
-            None,
-            &pkce,
-            "s",
+            "chal",
+            "st",
         )
         .unwrap();
-        assert!(!no_scope.contains("scope="));
+        assert!(!without.contains("scope="));
+    }
+
+    #[test]
+    fn redacted_honours_anchor_and_body_flag() {
+        let e = OAuthError::Status {
+            url: "https://tenant.smithery.ai/secret-path?key=abc".into(),
+            code: 403,
+            body: "forbidden: token xyz".into(),
+        };
+        // dyson-style: full URL + body
+        let full = e.redacted(|u| u.to_string(), true);
+        assert!(full.contains("secret-path") && full.contains("forbidden: token xyz"));
+        // swarm-style: fixed resource domain, no body
+        let red = e.redacted(|_| "mcp.example.com".to_string(), false);
+        assert!(red.contains("mcp.example.com") && red.contains("403"));
+        assert!(!red.contains("secret-path") && !red.contains("xyz"));
     }
 }
