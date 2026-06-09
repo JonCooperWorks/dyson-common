@@ -7,7 +7,11 @@
 use serde::{Deserialize, Serialize};
 
 /// A seven-point feedback rating, `Terrible` (-3) … `Excellent` (+3).
+///
+/// Serializes in `snake_case` (`"not_good"`, `"very_good"`, …) — this is the
+/// canonical on-disk + export wire form that both repos persist and read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum FeedbackRating {
     Terrible,
     Bad,
@@ -79,6 +83,23 @@ mod tests {
         assert_eq!(FeedbackRating::Terrible.score(), -3);
         assert_eq!(FeedbackRating::Decent.score(), 0);
         assert_eq!(FeedbackRating::Excellent.score(), 3);
+    }
+
+    #[test]
+    fn rating_serializes_snake_case() {
+        // The on-disk + export wire contract both repos depend on.
+        assert_eq!(
+            serde_json::to_string(&FeedbackRating::NotGood).unwrap(),
+            "\"not_good\""
+        );
+        assert_eq!(
+            serde_json::to_string(&FeedbackRating::VeryGood).unwrap(),
+            "\"very_good\""
+        );
+        assert_eq!(
+            serde_json::from_str::<FeedbackRating>("\"good\"").unwrap(),
+            FeedbackRating::Good
+        );
     }
 
     #[test]

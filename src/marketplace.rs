@@ -28,9 +28,15 @@ pub struct CatalogSkill {
     pub name: String,
     pub version: String,
     pub description: String,
+    #[serde(default)]
     pub tags: Vec<String>,
+    // Optional metadata — `serde(default)` so a listing that omits these
+    // (rather than sending null) still deserializes.
+    #[serde(default)]
     pub license: Option<String>,
+    #[serde(default)]
     pub min_dyson_version: Option<String>,
+    #[serde(default)]
     pub sha256: Option<String>,
     pub content_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
