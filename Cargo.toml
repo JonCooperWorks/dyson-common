@@ -1,6 +1,6 @@
 [package]
 name = "dyson-common"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2024"
 license = "MIT"
 description = "Shared wire contracts and primitives for dyson and dyson-swarm (tokens, OAuth/MCP-auth, cost, feedback, skill-marketplace)."
@@ -17,6 +17,12 @@ base64 = { version = "0.22", optional = true }
 rand = { version = "0.8", optional = true }
 sha2 = { version = "0.10", optional = true }
 
+# OIDC JWKS key construction — only consumers that verify inbound JWTs.
+# Must match the version both repos use (10.3, rust_crypto backend) so the
+# returned DecodingKey unifies across the git-dependency boundary.
+jsonwebtoken = { version = "10.3", optional = true, default-features = false, features = ["rust_crypto"] }
+
 [features]
 default = []
 oauth-client = ["dep:reqwest", "dep:base64", "dep:rand", "dep:sha2"]
+oidc = ["dep:jsonwebtoken"]

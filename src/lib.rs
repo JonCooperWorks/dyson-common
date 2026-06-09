@@ -21,8 +21,12 @@
 //! - [`feedback`] — the conversation feedback rating + entry.
 //! - [`marketplace`] — the published skill-catalog wire DTOs.
 
+pub mod auth;
 pub mod cost;
 pub mod feedback;
 pub mod marketplace;
+pub mod net;
 pub mod oauth;
+#[cfg(feature = "oidc")]
+pub mod oidc;
 pub mod tokens;
