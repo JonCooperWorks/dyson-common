@@ -15,6 +15,22 @@ function useEscapeKey(handler) {
 }
 
 // ui/Modal.jsx
+var FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "area[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])'
+].join(",");
+function focusableWithin(root) {
+  if (!root) return [];
+  return Array.prototype.filter.call(
+    root.querySelectorAll(FOCUSABLE_SELECTOR),
+    (el) => el.tabIndex !== -1 && !el.hasAttribute("disabled")
+  );
+}
 function Modal({
   onClose,
   label,
@@ -25,17 +41,60 @@ function Modal({
   children
 }) {
   useEscapeKey(onClose);
+  const dialogRef = React2.useRef(null);
+  const openerRef = React2.useRef(void 0);
+  if (openerRef.current === void 0) {
+    openerRef.current = typeof document !== "undefined" ? document.activeElement : null;
+  }
+  React2.useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.contains(document.activeElement)) {
+      const focusables = focusableWithin(dialog);
+      (focusables[0] || dialog).focus();
+    }
+    return () => {
+      const opener = openerRef.current;
+      if (opener && opener.isConnected && typeof opener.focus === "function") {
+        opener.focus();
+      }
+    };
+  }, []);
   const onScrimClick = (e) => {
     if (closeOnScrimClick && e.target === e.currentTarget) onClose?.();
+  };
+  const onKeyDown = (e) => {
+    if (e.key !== "Tab") return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const focusables = focusableWithin(dialog);
+    if (focusables.length === 0) {
+      e.preventDefault();
+      return;
+    }
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey) {
+      if (active === first || !dialog.contains(active)) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else if (active === last || !dialog.contains(active)) {
+      e.preventDefault();
+      first.focus();
+    }
   };
   return /* @__PURE__ */ React2.createElement("div", { className: scrimClassName, onClick: onScrimClick }, /* @__PURE__ */ React2.createElement(
     "div",
     {
+      ref: dialogRef,
       className,
       role: "dialog",
       "aria-modal": "true",
       "aria-label": label,
-      "aria-labelledby": labelledBy
+      "aria-labelledby": labelledBy,
+      tabIndex: -1,
+      onKeyDown
     },
     children
   ));

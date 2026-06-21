@@ -76,4 +76,74 @@ describe('Modal', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  test('moves focus to the first focusable element on open', () => {
+    render(
+      React.createElement(
+        Modal,
+        { onClose: vi.fn(), label: 'x' },
+        React.createElement('button', { key: 'a' }, 'first'),
+        React.createElement('button', { key: 'b' }, 'second'),
+      ),
+    );
+    expect(document.activeElement).toBe(screen.getByText('first'));
+  });
+
+  test('does not steal focus from a child that already grabbed it', () => {
+    render(
+      React.createElement(
+        Modal,
+        { onClose: vi.fn(), label: 'x' },
+        React.createElement('input', { key: 'a', 'aria-label': 'search' }),
+        React.createElement('button', { key: 'b', autoFocus: true }, 'go'),
+      ),
+    );
+    // The autofocused button kept focus; the modal didn't yank it to the input.
+    expect(document.activeElement).toBe(screen.getByText('go'));
+  });
+
+  test('traps Tab focus within the dialog (wraps at both ends)', () => {
+    render(
+      React.createElement(
+        Modal,
+        { onClose: vi.fn(), label: 'x' },
+        React.createElement('button', { key: 'a' }, 'first'),
+        React.createElement('button', { key: 'b' }, 'second'),
+      ),
+    );
+    const first = screen.getByText('first');
+    const second = screen.getByText('second');
+    const dialog = screen.getByRole('dialog');
+
+    // Tab from the last focusable wraps to the first.
+    second.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(document.activeElement).toBe(first);
+
+    // Shift+Tab from the first wraps to the last.
+    first.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(second);
+  });
+
+  test('restores focus to the opener on close', () => {
+    const opener = document.createElement('button');
+    opener.textContent = 'opener';
+    document.body.appendChild(opener);
+    opener.focus();
+    expect(document.activeElement).toBe(opener);
+
+    const { unmount } = render(
+      React.createElement(
+        Modal,
+        { onClose: vi.fn(), label: 'x' },
+        React.createElement('button', { key: 'a' }, 'inside'),
+      ),
+    );
+    expect(document.activeElement).toBe(screen.getByText('inside'));
+
+    unmount();
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
 });
