@@ -25,6 +25,7 @@ use super::{
 
 const B64: base64::engine::general_purpose::GeneralPurpose =
     base64::engine::general_purpose::URL_SAFE_NO_PAD;
+const MAX_OAUTH_RESPONSE_BYTES: usize = 256 * 1024;
 
 /// A transport-layer OAuth failure. Fields are raw; format via
 /// [`OAuthError::redacted`] so the caller controls URL redaction + whether to
@@ -208,14 +209,50 @@ async fn get_json<T: serde::de::DeserializeOwned>(
         })?;
     let code = resp.status().as_u16();
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
+        let body = response_text_capped(resp, url).await.unwrap_or_default();
         return Err(OAuthError::Status {
             url: url.to_string(),
             code,
             body,
         });
     }
-    resp.json::<T>().await.map_err(|e| OAuthError::Parse {
+    response_json_capped(resp, url).await
+}
+
+async fn response_bytes_capped(
+    mut resp: reqwest::Response,
+    url: &str,
+) -> Result<Vec<u8>, OAuthError> {
+    let mut body = Vec::new();
+    while let Some(chunk) = resp.chunk().await.map_err(|e| OAuthError::Transport {
+        url: url.to_string(),
+        kind: err_kind(&e).into(),
+    })? {
+        if body.len().saturating_add(chunk.len()) > MAX_OAUTH_RESPONSE_BYTES {
+            return Err(OAuthError::Parse {
+                url: url.to_string(),
+                detail: format!("response body exceeded {MAX_OAUTH_RESPONSE_BYTES} bytes"),
+            });
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
+}
+
+async fn response_text_capped(resp: reqwest::Response, url: &str) -> Result<String, OAuthError> {
+    let bytes = response_bytes_capped(resp, url).await?;
+    String::from_utf8(bytes).map_err(|e| OAuthError::Parse {
+        url: url.to_string(),
+        detail: e.to_string(),
+    })
+}
+
+async fn response_json_capped<T: serde::de::DeserializeOwned>(
+    resp: reqwest::Response,
+    url: &str,
+) -> Result<T, OAuthError> {
+    let bytes = response_bytes_capped(resp, url).await?;
+    serde_json::from_slice(&bytes).map_err(|e| OAuthError::Parse {
         url: url.to_string(),
         detail: e.to_string(),
     })
@@ -250,17 +287,16 @@ pub async fn fetch_protected_resource(
     }
     let code = resp.status().as_u16();
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
+        let body = response_text_capped(resp, prm_url)
+            .await
+            .unwrap_or_default();
         return Err(OAuthError::Status {
             url: prm_url.to_string(),
             code,
             body,
         });
     }
-    let prm: ProtectedResourceMetadata = resp.json().await.map_err(|e| OAuthError::Parse {
-        url: prm_url.to_string(),
-        detail: e.to_string(),
-    })?;
+    let prm: ProtectedResourceMetadata = response_json_capped(resp, prm_url).await?;
     Ok(prm.authorization_servers.into_iter().next())
 }
 
@@ -281,19 +317,16 @@ pub async fn register_client(
         })?;
     let code = resp.status().as_u16();
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
+        let body = response_text_capped(resp, registration_endpoint)
+            .await
+            .unwrap_or_default();
         return Err(OAuthError::Status {
             url: registration_endpoint.to_string(),
             code,
             body,
         });
     }
-    resp.json::<DcrResponse>()
-        .await
-        .map_err(|e| OAuthError::Parse {
-            url: registration_endpoint.to_string(),
-            detail: e.to_string(),
-        })
+    response_json_capped(resp, registration_endpoint).await
 }
 
 async fn post_token(
@@ -312,19 +345,16 @@ async fn post_token(
         })?;
     let code = resp.status().as_u16();
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
+        let body = response_text_capped(resp, token_url)
+            .await
+            .unwrap_or_default();
         return Err(OAuthError::Status {
             url: token_url.to_string(),
             code,
             body,
         });
     }
-    resp.json::<TokenResponse>()
-        .await
-        .map_err(|e| OAuthError::Parse {
-            url: token_url.to_string(),
-            detail: e.to_string(),
-        })
+    response_json_capped(resp, token_url).await
 }
 
 /// Exchange an authorization code for tokens (RFC 6749 §4.1.3).
