@@ -5,3 +5,13 @@ export { Modal } from './Modal.jsx';
 export { Combobox } from './Combobox.jsx';
 export { useEscapeKey } from './useEscapeKey.js';
 export { DysonMark, ComputerMark, DYSON_BLUE } from './DysonMark.jsx';
+export {
+  formatUsd,
+  formatBalance,
+  formatTokens,
+  formatCount,
+  formatBytes,
+  formatDuration,
+} from './format.js';
+export { copyToClipboard } from './clipboard.js';
+export { createThemeController, MODES as THEME_MODES } from './theme.js';

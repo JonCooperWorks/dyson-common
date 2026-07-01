@@ -309,11 +309,154 @@ function ComputerMark({ size = 24, color = DYSON_BLUE, title = "Dyson Computer",
     /* @__PURE__ */ React4.createElement("g", { transform: "translate(120,84) scale(0.62)" }, /* @__PURE__ */ React4.createElement(Glyph, { color }))
   );
 }
+
+// ui/format.js
+function formatUsd(value) {
+  if (value === null || value === void 0 || Number.isNaN(Number(value))) return "$0.00";
+  const n = Number(value);
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  if (abs > 0 && abs < 0.01) return `${sign}$${trimFixed(abs, abs < 1e-4 ? 6 : 4)}`;
+  return `${sign}$${abs.toFixed(2)}`;
+}
+function formatBalance(value) {
+  const cents = Math.round((Number(value) || 0) * 100);
+  if (cents === 0) return "$0.00";
+  const abs = (Math.abs(cents) / 100).toFixed(2);
+  return cents < 0 ? `\u2212$${abs}` : `$${abs}`;
+}
+function formatTokens(value) {
+  const n = Number(value || 0);
+  if (n >= 1e9) return `${trimFixed(n / 1e9, 1)}B`;
+  if (n >= 1e6) return `${trimFixed(n / 1e6, 1)}M`;
+  if (n >= 1e3) return `${trimFixed(n / 1e3, 1)}k`;
+  return String(Math.max(0, Math.round(n)));
+}
+function formatCount(value) {
+  return new Intl.NumberFormat("en-US").format(Number(value || 0));
+}
+function formatBytes(n) {
+  if (!Number.isFinite(n) || n <= 0) return "\u2014";
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  let v = n;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i += 1;
+  }
+  return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
+}
+function formatDuration(seconds) {
+  const s = Math.max(0, Math.round(Number(seconds || 0)));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.round(s / 60)}m`;
+  const h = s / 3600;
+  return h < 100 ? `${trimFixed(h, 1)}h` : `${Math.round(h)}h`;
+}
+function trimFixed(value, digits) {
+  return Number(value).toFixed(digits).replace(/\.0+$|(\.\d*?)0+$/u, "$1");
+}
+
+// ui/clipboard.js
+async function copyToClipboard(text) {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+// ui/theme.js
+var COOKIE = "dyson-theme";
+var MODES = ["system", "light", "dark"];
+var SURFACE = { dark: "#161922", light: "#ffffff" };
+function createThemeController({ storageKey, stripInstanceLabel = false }) {
+  function cookieDomain() {
+    let host = location.hostname.replace(/\.$/, "").toLowerCase();
+    if (stripInstanceLabel) host = host.replace(/^[^.]+\./, "");
+    if (!host.includes(".") || /^[0-9.]+$/.test(host)) return null;
+    return host;
+  }
+  function readCookie() {
+    const m = document.cookie.match(/(?:^|;\s*)dyson-theme=([^;]*)/);
+    const v = m && decodeURIComponent(m[1]);
+    return MODES.includes(v) ? v : null;
+  }
+  function writeCookie(mode) {
+    const dom = cookieDomain();
+    document.cookie = `${COOKIE}=${mode}; Path=/; Max-Age=31536000; SameSite=Lax` + (dom ? `; Domain=${dom}` : "") + (location.protocol === "https:" ? "; Secure" : "");
+  }
+  function getMode() {
+    const shared = readCookie();
+    if (shared) return shared;
+    try {
+      const v = localStorage.getItem(storageKey);
+      return MODES.includes(v) ? v : "system";
+    } catch {
+      return "system";
+    }
+  }
+  function resolvedTheme(mode = getMode()) {
+    if (mode === "system") {
+      return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    return mode;
+  }
+  function applyMode(mode) {
+    const root = document.documentElement;
+    if (mode === "system") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme", mode);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", SURFACE[resolvedTheme(mode)]);
+  }
+  function setMode(mode) {
+    const next = MODES.includes(mode) ? mode : "system";
+    try {
+      localStorage.setItem(storageKey, next);
+    } catch {
+    }
+    writeCookie(next);
+    applyMode(next);
+    return next;
+  }
+  function toggleTheme() {
+    return setMode(resolvedTheme() === "dark" ? "light" : "dark");
+  }
+  function initTheme() {
+    applyMode(getMode());
+    window.matchMedia?.("(prefers-color-scheme: light)").addEventListener?.("change", () => {
+      if (getMode() === "system") applyMode("system");
+    });
+  }
+  return { getMode, resolvedTheme, applyMode, setMode, toggleTheme, initTheme };
+}
 export {
   Combobox,
   ComputerMark,
   DYSON_BLUE,
   DysonMark,
   Modal,
+  MODES as THEME_MODES,
+  copyToClipboard,
+  createThemeController,
+  formatBalance,
+  formatBytes,
+  formatCount,
+  formatDuration,
+  formatTokens,
+  formatUsd,
   useEscapeKey
 };

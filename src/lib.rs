@@ -20,6 +20,8 @@
 //! - [`cost`] — the `/v1/internal/audit/calls` cost-row wire DTO.
 //! - [`feedback`] — the conversation feedback rating + entry.
 //! - [`marketplace`] — the published skill-catalog wire DTOs.
+//! - [`state_sync`] — the durable-state predicate, upload envelope, and
+//!   sandbox env-var names for the state mirror.
 
 pub mod auth;
 pub mod cost;
@@ -29,4 +31,5 @@ pub mod net;
 pub mod oauth;
 #[cfg(feature = "oidc")]
 pub mod oidc;
+pub mod state_sync;
 pub mod tokens;
