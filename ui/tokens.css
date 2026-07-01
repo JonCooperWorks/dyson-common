@@ -46,17 +46,18 @@
   --control-height: 34px;
 }
 
-/* Light palette.  Cool-slate family so it reads as the same product as the
-   dark theme, just inverted.  Accent + status colours are deepened for AA
-   contrast on white; shadows go soft and slate-tinted rather than black. */
+/* Light palette.  Blue-tinted so it keeps the dark theme's blue identity
+   rather than reading as neutral grey — surfaces, borders and text all carry
+   a cool blue undertone, and the accent stays a clear blue (deepened for AA
+   contrast on white).  Shadows use a blue base too. */
 :root[data-theme="light"] {
-  --bg: #f6f8fb;
+  --bg: #eef2fb;
   --bg-1: #ffffff;
-  --bg-2: #eef2f7;
-  --fg: #0f172a;
-  --fg-muted: #4a5568;
-  --fg-faint: #94a3b8;
-  --border: #dce3ec;
+  --bg-2: #e2e9f7;
+  --fg: #101a2e;
+  --fg-muted: #46536e;
+  --fg-faint: #8b98b4;
+  --border: #d3ddf0;
   --accent: #2563eb;
   --accent-fg: #ffffff;
   --danger: #dc2626;
@@ -64,23 +65,23 @@
   --ok: #059669;
   --on-solid: #ffffff;
 
-  --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.08);
-  --shadow-2: 0 6px 20px -6px rgba(15, 23, 42, 0.14), 0 2px 6px -2px rgba(15, 23, 42, 0.08);
-  --shadow-3: 0 18px 40px -14px rgba(15, 23, 42, 0.22), 0 6px 14px -6px rgba(15, 23, 42, 0.12);
-  --scrim: rgba(15, 23, 42, 0.32);
+  --shadow-1: 0 1px 2px rgba(30, 58, 138, 0.10);
+  --shadow-2: 0 6px 20px -6px rgba(30, 58, 138, 0.16), 0 2px 6px -2px rgba(30, 58, 138, 0.10);
+  --shadow-3: 0 18px 40px -14px rgba(30, 58, 138, 0.22), 0 6px 14px -6px rgba(30, 58, 138, 0.14);
+  --scrim: rgba(15, 23, 45, 0.32);
 }
 
 @media (prefers-color-scheme: light) {
   /* System mode only: no explicit choice recorded.  Keep values identical to
      the [data-theme="light"] block above. */
   :root:not([data-theme]) {
-    --bg: #f6f8fb;
+    --bg: #eef2fb;
     --bg-1: #ffffff;
-    --bg-2: #eef2f7;
-    --fg: #0f172a;
-    --fg-muted: #4a5568;
-    --fg-faint: #94a3b8;
-    --border: #dce3ec;
+    --bg-2: #e2e9f7;
+    --fg: #101a2e;
+    --fg-muted: #46536e;
+    --fg-faint: #8b98b4;
+    --border: #d3ddf0;
     --accent: #2563eb;
     --accent-fg: #ffffff;
     --danger: #dc2626;
@@ -88,9 +89,9 @@
     --ok: #059669;
     --on-solid: #ffffff;
 
-    --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.08);
-    --shadow-2: 0 6px 20px -6px rgba(15, 23, 42, 0.14), 0 2px 6px -2px rgba(15, 23, 42, 0.08);
-    --shadow-3: 0 18px 40px -14px rgba(15, 23, 42, 0.22), 0 6px 14px -6px rgba(15, 23, 42, 0.12);
-    --scrim: rgba(15, 23, 42, 0.32);
+    --shadow-1: 0 1px 2px rgba(30, 58, 138, 0.10);
+    --shadow-2: 0 6px 20px -6px rgba(30, 58, 138, 0.16), 0 2px 6px -2px rgba(30, 58, 138, 0.10);
+    --shadow-3: 0 18px 40px -14px rgba(30, 58, 138, 0.22), 0 6px 14px -6px rgba(30, 58, 138, 0.14);
+    --scrim: rgba(15, 23, 45, 0.32);
   }
 }
