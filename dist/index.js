@@ -209,8 +209,66 @@ function Combobox({
     opt.hint ? /* @__PURE__ */ React3.createElement("span", { className: "combobox-hint" }, opt.hint) : null
   ))) : null);
 }
+
+// ui/DysonMark.jsx
+import React4 from "react";
+var PANELS = [
+  "M56.9,-11.1 L94.2,-18.3 L94.2,18.3 L56.9,11.1Z",
+  "M54.8,18.9 L90.8,31.3 L72.5,63.0 L43.8,38.1Z",
+  "M38.1,43.8 L63.0,72.5 L31.3,90.8 L18.9,54.8Z",
+  "M11.1,56.9 L18.3,94.2 L-18.3,94.2 L-11.1,56.9Z",
+  "M-18.9,54.8 L-31.3,90.8 L-63.0,72.5 L-38.1,43.8Z",
+  "M-43.8,38.1 L-72.5,63.0 L-90.8,31.3 L-54.8,18.9Z",
+  "M-56.9,11.1 L-94.2,18.3 L-94.2,-18.3 L-56.9,-11.1Z",
+  "M-54.8,-18.9 L-90.8,-31.3 L-72.5,-63.0 L-43.8,-38.1Z",
+  "M-38.1,-43.8 L-63.0,-72.5 L-31.3,-90.8 L-18.9,-54.8Z",
+  "M-11.1,-56.9 L-18.3,-94.2 L18.3,-94.2 L11.1,-56.9Z",
+  "M22.8,-66.2 L35.2,-102.1 L70.9,-81.5 L45.9,-52.8Z",
+  "M52.8,-45.9 L81.5,-70.9 L102.1,-35.2 L66.2,-22.8Z"
+];
+var SHELL = PANELS.join(" ");
+var DYSON_BLUE = "#3b82f6";
+function Glyph({ color }) {
+  return /* @__PURE__ */ React4.createElement(React4.Fragment, null, /* @__PURE__ */ React4.createElement("path", { d: SHELL, fill: color }), /* @__PURE__ */ React4.createElement("circle", { r: "26", fill: color }));
+}
+function DysonMark({ size = 24, color = DYSON_BLUE, title = "Dyson", ...rest }) {
+  return /* @__PURE__ */ React4.createElement(
+    "svg",
+    {
+      width: size,
+      height: size,
+      viewBox: "-112 -112 224 224",
+      role: "img",
+      "aria-label": title,
+      style: { display: "block" },
+      ...rest
+    },
+    /* @__PURE__ */ React4.createElement(Glyph, { color })
+  );
+}
+function ComputerMark({ size = 24, color = DYSON_BLUE, title = "Dyson Computer", ...rest }) {
+  return /* @__PURE__ */ React4.createElement(
+    "svg",
+    {
+      width: size,
+      height: size,
+      viewBox: "0 0 240 224",
+      role: "img",
+      "aria-label": title,
+      style: { display: "block" },
+      ...rest
+    },
+    /* @__PURE__ */ React4.createElement("rect", { x: "16", y: "8", width: "208", height: "152", rx: "18", fill: "none", stroke: "currentColor", strokeWidth: "11" }),
+    /* @__PURE__ */ React4.createElement("rect", { x: "108", y: "160", width: "24", height: "26", fill: "currentColor" }),
+    /* @__PURE__ */ React4.createElement("rect", { x: "74", y: "186", width: "92", height: "14", rx: "7", fill: "currentColor" }),
+    /* @__PURE__ */ React4.createElement("g", { transform: "translate(120,84) scale(0.62)" }, /* @__PURE__ */ React4.createElement(Glyph, { color }))
+  );
+}
 export {
   Combobox,
+  ComputerMark,
+  DYSON_BLUE,
+  DysonMark,
   Modal,
   useEscapeKey
 };

@@ -4,3 +4,4 @@
 export { Modal } from './Modal.jsx';
 export { Combobox } from './Combobox.jsx';
 export { useEscapeKey } from './useEscapeKey.js';
+export { DysonMark, ComputerMark, DYSON_BLUE } from './DysonMark.jsx';
