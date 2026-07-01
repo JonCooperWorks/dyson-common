@@ -102,6 +102,7 @@ function Modal({
 
 // ui/Combobox.jsx
 import React3 from "react";
+import { createPortal } from "react-dom";
 function Combobox({
   options,
   value = "",
@@ -117,10 +118,35 @@ function Combobox({
   const [query, setQuery] = React3.useState(committedLabel);
   const [open, setOpen] = React3.useState(false);
   const [activeIndex, setActiveIndex] = React3.useState(-1);
+  const [listPos, setListPos] = React3.useState(null);
+  const inputRef = React3.useRef(null);
   const listId = React3.useId();
   React3.useEffect(() => {
     setQuery(committedLabel);
   }, [committedLabel]);
+  const positionList = React3.useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUp = spaceBelow < 240 && rect.top > spaceBelow;
+    setListPos({
+      left: rect.left,
+      width: rect.width,
+      top: openUp ? void 0 : rect.bottom + 2,
+      bottom: openUp ? window.innerHeight - rect.top + 2 : void 0
+    });
+  }, []);
+  React3.useLayoutEffect(() => {
+    if (!open) return void 0;
+    positionList();
+    window.addEventListener("scroll", positionList, true);
+    window.addEventListener("resize", positionList);
+    return () => {
+      window.removeEventListener("scroll", positionList, true);
+      window.removeEventListener("resize", positionList);
+    };
+  }, [open, positionList]);
   const editing = query.trim() !== committedLabel.trim();
   const needle = editing ? query.trim().toLowerCase() : "";
   const visible = needle ? opts.filter((o) => o.label.toLowerCase().includes(needle) || String(o.value).toLowerCase().includes(needle)) : opts;
@@ -177,6 +203,7 @@ function Combobox({
       autoCapitalize: "off",
       spellCheck: false,
       "aria-label": ariaLabel,
+      ref: inputRef,
       className: "combobox-input",
       value: query,
       placeholder,
@@ -193,21 +220,39 @@ function Combobox({
       },
       onKeyDown
     }
-  ), open && !disabled ? /* @__PURE__ */ React3.createElement("ul", { className: "combobox-list", id: listId, role: "listbox" }, visible.length === 0 ? /* @__PURE__ */ React3.createElement("li", { className: "combobox-empty" }, "no matches") : visible.map((opt, i) => /* @__PURE__ */ React3.createElement(
-    "li",
-    {
-      key: opt.value,
-      role: "option",
-      "aria-selected": opt.value === value,
-      className: `combobox-option${i === activeIndex ? " is-active" : ""}`,
-      onMouseDown: (e) => {
-        e.preventDefault();
-        commit(opt);
-      }
-    },
-    /* @__PURE__ */ React3.createElement("span", { className: "combobox-option-label" }, opt.label),
-    opt.hint ? /* @__PURE__ */ React3.createElement("span", { className: "combobox-hint" }, opt.hint) : null
-  ))) : null);
+  ), open && !disabled && listPos ? createPortal(
+    /* @__PURE__ */ React3.createElement(
+      "ul",
+      {
+        className: "combobox-list",
+        id: listId,
+        role: "listbox",
+        style: {
+          left: listPos.left,
+          width: listPos.width,
+          top: listPos.top,
+          bottom: listPos.bottom
+        },
+        onMouseDown: (e) => e.preventDefault()
+      },
+      visible.length === 0 ? /* @__PURE__ */ React3.createElement("li", { className: "combobox-empty" }, "no matches") : visible.map((opt, i) => /* @__PURE__ */ React3.createElement(
+        "li",
+        {
+          key: opt.value,
+          role: "option",
+          "aria-selected": opt.value === value,
+          className: `combobox-option${i === activeIndex ? " is-active" : ""}`,
+          onMouseDown: (e) => {
+            e.preventDefault();
+            commit(opt);
+          }
+        },
+        /* @__PURE__ */ React3.createElement("span", { className: "combobox-option-label" }, opt.label),
+        opt.hint ? /* @__PURE__ */ React3.createElement("span", { className: "combobox-hint" }, opt.hint) : null
+      ))
+    ),
+    document.body
+  ) : null);
 }
 
 // ui/DysonMark.jsx

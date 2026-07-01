@@ -105,6 +105,15 @@ describe('Combobox', () => {
     }
   });
 
+  test('list is portalled to <body> so overflow:hidden ancestors cannot clip it', () => {
+    const input = renderBox();
+    fireEvent.focus(input);
+    // Regression: the hire form's .mcp-card { overflow: hidden } used to eat
+    // the dropdown when it rendered inside the combobox wrapper.
+    expect(list().parentElement).toBe(document.body);
+    expect(list().closest('.combobox')).toBeNull();
+  });
+
   test('disabled renders no dropdown', () => {
     const input = renderBox({ value: 'a', disabled: true });
     expect(input).toBeDisabled();

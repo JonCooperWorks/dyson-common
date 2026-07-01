@@ -39,11 +39,11 @@
 .combobox { position: relative; }
 .combobox-input { width: 100%; }
 .combobox-list {
-  position: absolute;
-  top: calc(100% + 2px);
-  left: 0;
-  right: 0;
-  z-index: 30;
+  /* Portalled to <body> and anchored to the input with inline top/bottom/
+   * left/width, so overflow:hidden ancestors can't clip it. Must sit above
+   * the modal scrim (z-index 100). */
+  position: fixed;
+  z-index: 200;
   margin: 0;
   padding: 4px;
   list-style: none;

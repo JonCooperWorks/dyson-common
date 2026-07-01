@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * Reusable searchable single-select dropdown.
@@ -7,6 +8,11 @@ import React from 'react';
  * committed label and so hides every other entry once one is chosen) this
  * renders its own list: type to filter, but the full list is always one
  * keystroke (clear the box) away, so no option can become unreachable.
+ *
+ * The list is portalled to <body> and fixed-positioned against the input,
+ * so an ancestor with overflow:hidden/auto (cards, modals, scroll panes)
+ * can never clip it. It tracks the input across scroll and resize, and
+ * flips above the input when the viewport leaves no room below.
  *
  *   options  : [{ value: string, label: string, hint?: string }]
  *   value    : currently-selected value ('' = none)
@@ -32,9 +38,41 @@ export function Combobox({
   const [query, setQuery] = React.useState(committedLabel);
   const [open, setOpen] = React.useState(false);
   const [activeIndex, setActiveIndex] = React.useState(-1);
+  const [listPos, setListPos] = React.useState(null);
+  const inputRef = React.useRef(null);
   const listId = React.useId();
 
   React.useEffect(() => { setQuery(committedLabel); }, [committedLabel]);
+
+  // Anchor the portalled list to the input. Fixed positioning is viewport-
+  // relative, so recompute whenever anything scrolls (capture phase catches
+  // scrolls of inner panes, not just the window) or the window resizes.
+  const positionList = React.useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    // 240px = the list's CSS max-height; flip up only when it can't fit
+    // below but could fit better above.
+    const openUp = spaceBelow < 240 && rect.top > spaceBelow;
+    setListPos({
+      left: rect.left,
+      width: rect.width,
+      top: openUp ? undefined : rect.bottom + 2,
+      bottom: openUp ? window.innerHeight - rect.top + 2 : undefined,
+    });
+  }, []);
+
+  React.useLayoutEffect(() => {
+    if (!open) return undefined;
+    positionList();
+    window.addEventListener('scroll', positionList, true);
+    window.addEventListener('resize', positionList);
+    return () => {
+      window.removeEventListener('scroll', positionList, true);
+      window.removeEventListener('resize', positionList);
+    };
+  }, [open, positionList]);
 
   // While the box still shows the committed label the user hasn't started a
   // new search, so show everything; once they edit, filter by the text.
@@ -107,6 +145,7 @@ export function Combobox({
         autoCapitalize="off"
         spellCheck={false}
         aria-label={ariaLabel}
+        ref={inputRef}
         className="combobox-input"
         value={query}
         placeholder={placeholder}
@@ -116,8 +155,21 @@ export function Combobox({
         onBlur={() => { setOpen(false); setQuery(committedLabel); setActiveIndex(-1); }}
         onKeyDown={onKeyDown}
       />
-      {open && !disabled ? (
-        <ul className="combobox-list" id={listId} role="listbox">
+      {open && !disabled && listPos ? createPortal(
+        <ul
+          className="combobox-list"
+          id={listId}
+          role="listbox"
+          style={{
+            left: listPos.left,
+            width: listPos.width,
+            top: listPos.top,
+            bottom: listPos.bottom,
+          }}
+          // preventDefault so grabbing the list's scrollbar doesn't blur
+          // the input (which would close the list mid-scroll)
+          onMouseDown={(e) => e.preventDefault()}
+        >
           {visible.length === 0 ? (
             <li className="combobox-empty">no matches</li>
           ) : visible.map((opt, i) => (
@@ -133,7 +185,8 @@ export function Combobox({
               {opt.hint ? <span className="combobox-hint">{opt.hint}</span> : null}
             </li>
           ))}
-        </ul>
+        </ul>,
+        document.body,
       ) : null}
     </div>
   );
