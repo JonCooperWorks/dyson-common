@@ -1,4 +1,16 @@
-/* swarm — design tokens.  Dark by default, light via prefers-color-scheme. */
+/* swarm + dyson — shared design tokens.
+ *
+ * Dark is the default (`:root`).  Light is applied two ways:
+ *   • explicit user choice   → `:root[data-theme="light"]`
+ *   • "system" (no choice)   → `@media (prefers-color-scheme: light)` while
+ *                              no `data-theme` attribute is set.
+ * Picking dark explicitly (`data-theme="dark"`) keeps the `:root` defaults
+ * and is excluded from the media query, so it wins over an OS light setting.
+ *
+ * The theme controller in each app writes `data-theme` on <html>; absence of
+ * the attribute means "follow the OS".  Keep the two light blocks below in
+ * sync — CSS can't share one declaration list across a bare selector and a
+ * media-nested one. */
 
 :root {
   --bg: #0f1115;
@@ -13,6 +25,20 @@
   --danger: #f87171;
   --warn: #fbbf24;
   --ok: #34d399;
+  /* Ink for text/icons sitting ON a solid status colour (--ok/--warn/--danger
+     as a background).  Dark theme's status colours are bright, so ink is dark;
+     light theme's are deep, so ink is white.  Lets a solid status badge stay
+     legible in both themes from one declaration. */
+  --on-solid: #0b1220;
+
+  /* Elevation — dark leans on deep, near-black shadows.  Consumers read
+     these so a single change reflows every raised surface in both themes. */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 6px 22px rgba(0, 0, 0, 0.25);
+  --shadow-3: 0 18px 38px -12px rgba(0, 0, 0, 0.6);
+  /* Scrim behind modals/menus. */
+  --scrim: rgba(0, 0, 0, 0.5);
+
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --radius: 6px;
@@ -20,15 +46,51 @@
   --control-height: 34px;
 }
 
+/* Light palette.  Cool-slate family so it reads as the same product as the
+   dark theme, just inverted.  Accent + status colours are deepened for AA
+   contrast on white; shadows go soft and slate-tinted rather than black. */
+:root[data-theme="light"] {
+  --bg: #f6f8fb;
+  --bg-1: #ffffff;
+  --bg-2: #eef2f7;
+  --fg: #0f172a;
+  --fg-muted: #4a5568;
+  --fg-faint: #94a3b8;
+  --border: #dce3ec;
+  --accent: #2563eb;
+  --accent-fg: #ffffff;
+  --danger: #dc2626;
+  --warn: #b45309;
+  --ok: #059669;
+  --on-solid: #ffffff;
+
+  --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --shadow-2: 0 6px 20px -6px rgba(15, 23, 42, 0.14), 0 2px 6px -2px rgba(15, 23, 42, 0.08);
+  --shadow-3: 0 18px 40px -14px rgba(15, 23, 42, 0.22), 0 6px 14px -6px rgba(15, 23, 42, 0.12);
+  --scrim: rgba(15, 23, 42, 0.32);
+}
+
 @media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f8fafc;
+  /* System mode only: no explicit choice recorded.  Keep values identical to
+     the [data-theme="light"] block above. */
+  :root:not([data-theme]) {
+    --bg: #f6f8fb;
     --bg-1: #ffffff;
-    --bg-2: #f1f5f9;
+    --bg-2: #eef2f7;
     --fg: #0f172a;
-    --fg-muted: #475569;
+    --fg-muted: #4a5568;
     --fg-faint: #94a3b8;
-    --border: #e2e8f0;
+    --border: #dce3ec;
+    --accent: #2563eb;
     --accent-fg: #ffffff;
+    --danger: #dc2626;
+    --warn: #b45309;
+    --ok: #059669;
+    --on-solid: #ffffff;
+
+    --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.08);
+    --shadow-2: 0 6px 20px -6px rgba(15, 23, 42, 0.14), 0 2px 6px -2px rgba(15, 23, 42, 0.08);
+    --shadow-3: 0 18px 40px -14px rgba(15, 23, 42, 0.22), 0 6px 14px -6px rgba(15, 23, 42, 0.12);
+    --scrim: rgba(15, 23, 42, 0.32);
   }
 }
