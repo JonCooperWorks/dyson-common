@@ -13,6 +13,11 @@
  * media-nested one. */
 
 :root {
+  /* Match native form controls (button text, scrollbars, inputs) to the
+     visual theme.  Without this, a page-level "dark light" preference makes
+     the UA render buttontext white, so any bare <button> in light mode gets
+     invisible white text (e.g. the agent-kind cards). */
+  color-scheme: dark;
   --bg: #0f1115;
   --bg-1: #161922;
   --bg-2: #1d2230;
@@ -51,6 +56,7 @@
    a cool blue undertone, and the accent stays a clear blue (deepened for AA
    contrast on white).  Shadows use a blue base too. */
 :root[data-theme="light"] {
+  color-scheme: light;
   --bg: #eef2fb;
   --bg-1: #ffffff;
   --bg-2: #e2e9f7;
@@ -75,6 +81,7 @@
   /* System mode only: no explicit choice recorded.  Keep values identical to
      the [data-theme="light"] block above. */
   :root:not([data-theme]) {
+    color-scheme: light;
     --bg: #eef2fb;
     --bg-1: #ffffff;
     --bg-2: #e2e9f7;
