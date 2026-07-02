@@ -35,6 +35,59 @@
   margin-top: 16px;
 }
 
+/* ── <ConfirmModal> ───────────────────────────────────────────── */
+/* In-app confirm dialog (replaces native window.confirm via useConfirm).
+ * The message preserves the newlines of the multi-paragraph warning
+ * strings it inherited from confirm(). */
+.confirm-modal-message {
+  white-space: pre-wrap;
+  line-height: 1.5;
+  color: var(--fg);
+}
+
+/* ── <EmptyState> ─────────────────────────────────────────────── */
+.ui-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  margin: 6px 0 0;
+  padding: 32px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg-2) 42%, transparent);
+}
+.ui-empty-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-1);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 18px;
+  line-height: 1;
+}
+.ui-empty-title {
+  font-weight: 600;
+  color: var(--fg);
+}
+.ui-empty-body {
+  max-width: 360px;
+  line-height: 1.45;
+}
+.ui-empty-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 /* ── searchable <Combobox> ────────────────────────────────────── */
 .combobox { position: relative; }
 .combobox-input { width: 100%; }

@@ -22,10 +22,17 @@
 //! - [`marketplace`] — the published skill-catalog wire DTOs.
 //! - [`state_sync`] — the durable-state predicate, upload envelope, and
 //!   sandbox env-var names for the state mirror.
+//! - [`contracts`] — named header/route constants crossing the boundary.
+//! - [`jsonrpc`] — JSON-RPC 2.0 base envelope types (MCP transport).
+//! - [`util`] — constant-time compare, env parsing, backoff term.
+//! - [`date`] — civil-date arithmetic (both directions).
 
 pub mod auth;
+pub mod contracts;
 pub mod cost;
+pub mod date;
 pub mod feedback;
+pub mod jsonrpc;
 pub mod marketplace;
 pub mod net;
 pub mod oauth;
@@ -33,3 +40,4 @@ pub mod oauth;
 pub mod oidc;
 pub mod state_sync;
 pub mod tokens;
+pub mod util;

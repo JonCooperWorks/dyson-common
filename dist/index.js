@@ -100,8 +100,78 @@ function Modal({
   ));
 }
 
-// ui/Combobox.jsx
+// ui/ConfirmModal.jsx
 import React3 from "react";
+function ConfirmModal({
+  title,
+  confirmLabel = "confirm",
+  cancelLabel = "cancel",
+  busy = false,
+  onConfirm,
+  onCancel,
+  children
+}) {
+  const onClose = busy ? () => {
+  } : onCancel;
+  return /* @__PURE__ */ React3.createElement(Modal, { onClose, label: title }, /* @__PURE__ */ React3.createElement("div", { className: "modal-header" }, /* @__PURE__ */ React3.createElement("span", null, title)), /* @__PURE__ */ React3.createElement("div", { className: "modal-body confirm-modal-body" }, children), /* @__PURE__ */ React3.createElement("div", { className: "modal-actions" }, /* @__PURE__ */ React3.createElement(
+    "button",
+    {
+      type: "button",
+      className: "btn btn-ghost",
+      onClick: onCancel,
+      disabled: busy
+    },
+    cancelLabel
+  ), /* @__PURE__ */ React3.createElement(
+    "button",
+    {
+      type: "button",
+      className: "btn btn-primary confirm-modal-confirm",
+      onClick: onConfirm,
+      disabled: busy
+    },
+    busy ? "working\u2026" : confirmLabel
+  )));
+}
+function useConfirm() {
+  const [opts, setOpts] = React3.useState(null);
+  const resolverRef = React3.useRef(null);
+  const confirm = React3.useCallback((arg) => {
+    return new Promise((resolve) => {
+      resolverRef.current = resolve;
+      setOpts(typeof arg === "string" ? { message: arg } : arg || {});
+    });
+  }, []);
+  const settle = React3.useCallback((result) => {
+    const resolve = resolverRef.current;
+    resolverRef.current = null;
+    setOpts(null);
+    if (resolve) resolve(result);
+  }, []);
+  let confirmModal = null;
+  if (opts) {
+    const { message, children, ...rest } = opts;
+    confirmModal = /* @__PURE__ */ React3.createElement(
+      ConfirmModal,
+      {
+        ...rest,
+        onConfirm: () => settle(true),
+        onCancel: () => settle(false)
+      },
+      children != null ? children : /* @__PURE__ */ React3.createElement("div", { className: "confirm-modal-message" }, message)
+    );
+  }
+  return [confirm, confirmModal];
+}
+
+// ui/EmptyState.jsx
+import React4 from "react";
+function EmptyState({ glyph = "\u2205", title, children, actions = null, className = "" }) {
+  return /* @__PURE__ */ React4.createElement("div", { className: `ui-empty ${className}`.trim() }, /* @__PURE__ */ React4.createElement("div", { className: "ui-empty-glyph", "aria-hidden": "true" }, glyph), /* @__PURE__ */ React4.createElement("div", { className: "ui-empty-title" }, title), children ? /* @__PURE__ */ React4.createElement("div", { className: "ui-empty-body muted small" }, children) : null, actions ? /* @__PURE__ */ React4.createElement("div", { className: "ui-empty-actions" }, actions) : null);
+}
+
+// ui/Combobox.jsx
+import React5 from "react";
 import { createPortal } from "react-dom";
 function Combobox({
   options,
@@ -115,16 +185,16 @@ function Combobox({
   const opts = options || [];
   const selected = opts.find((o) => o.value === value) || null;
   const committedLabel = selected ? selected.label : "";
-  const [query, setQuery] = React3.useState(committedLabel);
-  const [open, setOpen] = React3.useState(false);
-  const [activeIndex, setActiveIndex] = React3.useState(-1);
-  const [listPos, setListPos] = React3.useState(null);
-  const inputRef = React3.useRef(null);
-  const listId = React3.useId();
-  React3.useEffect(() => {
+  const [query, setQuery] = React5.useState(committedLabel);
+  const [open, setOpen] = React5.useState(false);
+  const [activeIndex, setActiveIndex] = React5.useState(-1);
+  const [listPos, setListPos] = React5.useState(null);
+  const inputRef = React5.useRef(null);
+  const listId = React5.useId();
+  React5.useEffect(() => {
     setQuery(committedLabel);
   }, [committedLabel]);
-  const positionList = React3.useCallback(() => {
+  const positionList = React5.useCallback(() => {
     const el = inputRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -137,7 +207,7 @@ function Combobox({
       bottom: openUp ? window.innerHeight - rect.top + 2 : void 0
     });
   }, []);
-  React3.useLayoutEffect(() => {
+  React5.useLayoutEffect(() => {
     if (!open) return void 0;
     positionList();
     window.addEventListener("scroll", positionList, true);
@@ -190,7 +260,7 @@ function Combobox({
       setActiveIndex(-1);
     }
   };
-  return /* @__PURE__ */ React3.createElement("div", { className: "combobox" }, /* @__PURE__ */ React3.createElement(
+  return /* @__PURE__ */ React5.createElement("div", { className: "combobox" }, /* @__PURE__ */ React5.createElement(
     "input",
     {
       type: "text",
@@ -221,7 +291,7 @@ function Combobox({
       onKeyDown
     }
   ), open && !disabled && listPos ? createPortal(
-    /* @__PURE__ */ React3.createElement(
+    /* @__PURE__ */ React5.createElement(
       "ul",
       {
         className: "combobox-list",
@@ -235,7 +305,7 @@ function Combobox({
         },
         onMouseDown: (e) => e.preventDefault()
       },
-      visible.length === 0 ? /* @__PURE__ */ React3.createElement("li", { className: "combobox-empty" }, "no matches") : visible.map((opt, i) => /* @__PURE__ */ React3.createElement(
+      visible.length === 0 ? /* @__PURE__ */ React5.createElement("li", { className: "combobox-empty" }, "no matches") : visible.map((opt, i) => /* @__PURE__ */ React5.createElement(
         "li",
         {
           key: opt.value,
@@ -247,16 +317,99 @@ function Combobox({
             commit(opt);
           }
         },
-        /* @__PURE__ */ React3.createElement("span", { className: "combobox-option-label" }, opt.label),
-        opt.hint ? /* @__PURE__ */ React3.createElement("span", { className: "combobox-hint" }, opt.hint) : null
+        /* @__PURE__ */ React5.createElement("span", { className: "combobox-option-label" }, opt.label),
+        opt.hint ? /* @__PURE__ */ React5.createElement("span", { className: "combobox-hint" }, opt.hint) : null
       ))
     ),
     document.body
   ) : null);
 }
 
+// ui/createStore.js
+function deepFreeze(obj) {
+  if (obj === null || typeof obj !== "object") return obj;
+  if (Object.isFrozen(obj)) return obj;
+  Object.freeze(obj);
+  for (const key of Object.keys(obj)) {
+    const v = obj[key];
+    if (v !== null && typeof v === "object" && !Object.isFrozen(v)) deepFreeze(v);
+  }
+  return obj;
+}
+function createStore(initial) {
+  let snapshot = deepFreeze(initial);
+  const listeners = /* @__PURE__ */ new Set();
+  const getSnapshot = () => snapshot;
+  const subscribe = (fn) => {
+    listeners.add(fn);
+    return () => {
+      listeners.delete(fn);
+    };
+  };
+  const dispatch = (reducer) => {
+    const next = reducer(snapshot);
+    if (next === snapshot) return;
+    snapshot = deepFreeze(next);
+    for (const fn of listeners) fn();
+  };
+  return { getSnapshot, subscribe, dispatch };
+}
+
+// ui/store.js
+import { useSyncExternalStore, useRef } from "react";
+var identity = (s) => s;
+function createUseAppState(store) {
+  return function useAppState(selector) {
+    const sel = selector || identity;
+    const cacheRef = useRef(null);
+    const getSnapshot = () => {
+      const snap = store.getSnapshot();
+      const cache = cacheRef.current;
+      if (cache && cache.snap === snap) return cache.selected;
+      const selected = sel(snap);
+      if (cache && Object.is(cache.selected, selected)) {
+        cacheRef.current = { snap, selected: cache.selected };
+        return cache.selected;
+      }
+      cacheRef.current = { snap, selected };
+      return selected;
+    };
+    return useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot);
+  };
+}
+
+// ui/pkce.js
+function base64url(bytes) {
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function randomString(byteLen = 32) {
+  const a = new Uint8Array(byteLen);
+  crypto.getRandomValues(a);
+  return base64url(a);
+}
+async function pkceChallenge(verifier) {
+  const data = new TextEncoder().encode(verifier);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return base64url(new Uint8Array(digest));
+}
+
+// ui/download.js
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const revokeObjectURL = URL.revokeObjectURL?.bind(URL);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename || "download";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => revokeObjectURL?.(url), 5e3);
+}
+
 // ui/DysonMark.jsx
-import React4 from "react";
+import React6 from "react";
 var PANELS = [
   "M56.9,-11.1 L94.2,-18.3 L94.2,18.3 L56.9,11.1Z",
   "M54.8,18.9 L90.8,31.3 L72.5,63.0 L43.8,38.1Z",
@@ -274,10 +427,10 @@ var PANELS = [
 var SHELL = PANELS.join(" ");
 var DYSON_BLUE = "#3b82f6";
 function Glyph({ color }) {
-  return /* @__PURE__ */ React4.createElement(React4.Fragment, null, /* @__PURE__ */ React4.createElement("path", { d: SHELL, fill: color }), /* @__PURE__ */ React4.createElement("circle", { r: "26", fill: color }));
+  return /* @__PURE__ */ React6.createElement(React6.Fragment, null, /* @__PURE__ */ React6.createElement("path", { d: SHELL, fill: color }), /* @__PURE__ */ React6.createElement("circle", { r: "26", fill: color }));
 }
 function DysonMark({ size = 24, color = DYSON_BLUE, title = "Dyson", ...rest }) {
-  return /* @__PURE__ */ React4.createElement(
+  return /* @__PURE__ */ React6.createElement(
     "svg",
     {
       width: size,
@@ -288,11 +441,11 @@ function DysonMark({ size = 24, color = DYSON_BLUE, title = "Dyson", ...rest }) 
       style: { display: "block" },
       ...rest
     },
-    /* @__PURE__ */ React4.createElement(Glyph, { color })
+    /* @__PURE__ */ React6.createElement(Glyph, { color })
   );
 }
 function ComputerMark({ size = 24, color = DYSON_BLUE, title = "Dyson Computer", ...rest }) {
-  return /* @__PURE__ */ React4.createElement(
+  return /* @__PURE__ */ React6.createElement(
     "svg",
     {
       width: size,
@@ -303,10 +456,10 @@ function ComputerMark({ size = 24, color = DYSON_BLUE, title = "Dyson Computer",
       style: { display: "block" },
       ...rest
     },
-    /* @__PURE__ */ React4.createElement("rect", { x: "16", y: "8", width: "208", height: "152", rx: "18", fill: "none", stroke: "currentColor", strokeWidth: "11" }),
-    /* @__PURE__ */ React4.createElement("rect", { x: "108", y: "160", width: "24", height: "26", fill: "currentColor" }),
-    /* @__PURE__ */ React4.createElement("rect", { x: "74", y: "186", width: "92", height: "14", rx: "7", fill: "currentColor" }),
-    /* @__PURE__ */ React4.createElement("g", { transform: "translate(120,84) scale(0.62)" }, /* @__PURE__ */ React4.createElement(Glyph, { color }))
+    /* @__PURE__ */ React6.createElement("rect", { x: "16", y: "8", width: "208", height: "152", rx: "18", fill: "none", stroke: "currentColor", strokeWidth: "11" }),
+    /* @__PURE__ */ React6.createElement("rect", { x: "108", y: "160", width: "24", height: "26", fill: "currentColor" }),
+    /* @__PURE__ */ React6.createElement("rect", { x: "74", y: "186", width: "92", height: "14", rx: "7", fill: "currentColor" }),
+    /* @__PURE__ */ React6.createElement("g", { transform: "translate(120,84) scale(0.62)" }, /* @__PURE__ */ React6.createElement(Glyph, { color }))
   );
 }
 
@@ -446,17 +599,27 @@ function createThemeController({ storageKey, stripInstanceLabel = false }) {
 export {
   Combobox,
   ComputerMark,
+  ConfirmModal,
   DYSON_BLUE,
   DysonMark,
+  EmptyState,
   Modal,
   MODES as THEME_MODES,
+  base64url,
   copyToClipboard,
+  createStore,
   createThemeController,
+  createUseAppState,
+  deepFreeze,
+  downloadBlob,
   formatBalance,
   formatBytes,
   formatCount,
   formatDuration,
   formatTokens,
   formatUsd,
+  pkceChallenge,
+  randomString,
+  useConfirm,
   useEscapeKey
 };
