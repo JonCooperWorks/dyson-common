@@ -12,6 +12,12 @@ pub const PROXY_TOKEN_PREFIX: &str = "pt_";
 pub const INGEST_TOKEN_PREFIX: &str = "it_";
 pub const STATE_SYNC_TOKEN_PREFIX: &str = "st_";
 pub const SESSION_TOKEN_PREFIX: &str = "ses_";
+/// Customer-facing inference API key (`sk_<32hex>`). Sold to API customers who
+/// point an OpenAI/Anthropic/Responses client at the swarm; resolves to a
+/// billable `owner_id`. Stored server-side as a plain SHA-256 of the wire
+/// string (the body is 128 bits of CSPRNG, so a fast hash is leak-safe and a
+/// slow hash would only add a DoS surface on the auth hot path).
+pub const API_KEY_TOKEN_PREFIX: &str = "sk_";
 
 /// Why a string failed to parse as a typed token. Intentionally coarse —
 /// the distinction is useful for log forensics, not for an attacker.
@@ -132,6 +138,11 @@ typed_token!(
     SessionToken,
     SESSION_TOKEN_PREFIX,
     "Browser session token (`ses_<32hex>`). Set on the session cookie."
+);
+typed_token!(
+    ApiKeyToken,
+    API_KEY_TOKEN_PREFIX,
+    "Customer inference API key (`sk_<32hex>`). Presented as a Bearer on the `/v1/*` sell-side surface; resolves to a billable owner."
 );
 
 #[cfg(test)]
