@@ -18,6 +18,11 @@ pub const SESSION_TOKEN_PREFIX: &str = "ses_";
 /// string (the body is 128 bits of CSPRNG, so a fast hash is leak-safe and a
 /// slow hash would only add a DoS surface on the auth hot path).
 pub const API_KEY_TOKEN_PREFIX: &str = "sk_";
+/// Inbound bearer for a published MCP exposure (`mcp_<32hex>`). An external MCP
+/// client presents this as a `Bearer` to a `mcp-<slug>.<apex>` subdomain when
+/// the exposure's inbound auth is `bearer`. Stored server-side as a plain
+/// SHA-256 of the wire string (same leak-safe rationale as [`API_KEY_TOKEN_PREFIX`]).
+pub const MCP_EXPOSURE_TOKEN_PREFIX: &str = "mcp_";
 
 /// Why a string failed to parse as a typed token. Intentionally coarse —
 /// the distinction is useful for log forensics, not for an attacker.
@@ -143,6 +148,11 @@ typed_token!(
     ApiKeyToken,
     API_KEY_TOKEN_PREFIX,
     "Customer inference API key (`sk_<32hex>`). Presented as a Bearer on the `/v1/*` sell-side surface; resolves to a billable owner."
+);
+typed_token!(
+    McpExposureToken,
+    MCP_EXPOSURE_TOKEN_PREFIX,
+    "Inbound bearer for a published MCP exposure (`mcp_<32hex>`). Presented by an external MCP client to a `mcp-<slug>.<apex>` subdomain."
 );
 
 #[cfg(test)]
