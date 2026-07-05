@@ -24,6 +24,7 @@
 //!   sandbox env-var names for the state mirror.
 //! - [`contracts`] — named header/route constants crossing the boundary.
 //! - [`jsonrpc`] — JSON-RPC 2.0 base envelope types (MCP transport).
+//! - [`ui`] — shared design-token CSS and theme helpers for Rust-rendered pages.
 //! - [`util`] — constant-time compare, env parsing, backoff term.
 //! - [`date`] — civil-date arithmetic (both directions).
 
@@ -40,4 +41,5 @@ pub mod oauth;
 pub mod oidc;
 pub mod state_sync;
 pub mod tokens;
+pub mod ui;
 pub mod util;
