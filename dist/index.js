@@ -657,7 +657,7 @@ function SecurityReportView({ reportPath, fallback, load = loadFromMindRoute }) 
   const [flagFilter, setFlagFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(() => /* @__PURE__ */ new Set());
-  const [copied, setCopied] = useState(false);
+  const [copiedReport, setCopiedReport] = useState(false);
   useEffect(() => {
     let cancelled = false;
     setDoc(null);
@@ -688,10 +688,10 @@ function SecurityReportView({ reportPath, fallback, load = loadFromMindRoute }) 
     else next.add(idx);
     return next;
   });
-  const copyJson = async () => {
+  const copyReport = async () => {
     if (await copyToClipboard(JSON.stringify(doc, null, 2))) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
+      setCopiedReport(true);
+      setTimeout(() => setCopiedReport(false), 1200);
     }
   };
   const summary = doc.summary || {};
@@ -708,7 +708,7 @@ function SecurityReportView({ reportPath, fallback, load = loadFromMindRoute }) 
       value: query,
       onChange: (e) => setQuery(e.target.value)
     }
-  )), view === "json" && /* @__PURE__ */ React7.createElement("button", { className: "secrep-btn", onClick: copyJson }, copied ? "copied" : "copy"), /* @__PURE__ */ React7.createElement("span", { className: "secrep-spacer" }), /* @__PURE__ */ React7.createElement(
+  )), /* @__PURE__ */ React7.createElement("button", { className: "secrep-btn", onClick: copyReport }, copiedReport ? "copied" : "copy report"), /* @__PURE__ */ React7.createElement("span", { className: "secrep-spacer" }), /* @__PURE__ */ React7.createElement(
     "button",
     {
       className: "secrep-btn secrep-toggle",
@@ -736,7 +736,15 @@ function SecurityReportView({ reportPath, fallback, load = loadFromMindRoute }) 
   )))))));
 }
 function FindingCard({ finding: f, sev, open, onToggle }) {
-  return /* @__PURE__ */ React7.createElement("div", { className: "secrep-card" }, /* @__PURE__ */ React7.createElement("div", { className: "secrep-card-head", onClick: onToggle }, /* @__PURE__ */ React7.createElement("span", { className: "secrep-caret", style: { transform: open ? "rotate(90deg)" : "none" } }, /* @__PURE__ */ React7.createElement(Chevron, null)), /* @__PURE__ */ React7.createElement("span", { className: "secrep-dot", style: { background: SEVERITY_COLOR[sev] } }), /* @__PURE__ */ React7.createElement("span", { className: "secrep-card-title" }, f.title || f.run_finding_id || f.id), f.key && /* @__PURE__ */ React7.createElement("span", { className: "secrep-chip" }, f.key), f.recurring && /* @__PURE__ */ React7.createElement("span", { className: "secrep-chip" }, "recurring x", f.occurrences)), open && /* @__PURE__ */ React7.createElement("div", { className: "secrep-card-body" }, row("class", f.vulnerability_class && /* @__PURE__ */ React7.createElement("span", { className: "secrep-chip" }, f.vulnerability_class)), row("boundary", text(f.trust_boundary)), row("flow", (f.entry_point || f.sink_or_decision) && /* @__PURE__ */ React7.createElement("span", { className: "secrep-mono" }, f.entry_point, f.entry_point && f.sink_or_decision ? " \u2192 " : "", f.sink_or_decision)), row("root cause", text(f.root_cause)), row("reachability", text(f.reachability)), row("impact", text(f.tenant_or_instance_impact)), row("rationale", text(f.severity_rationale)), row("fix", text(f.fix_recommendation)), row("paths", Array.isArray(f.affected_paths) && f.affected_paths.length > 0 && /* @__PURE__ */ React7.createElement("span", { className: "secrep-paths" }, f.affected_paths.map((p, i) => /* @__PURE__ */ React7.createElement("span", { key: i, className: "secrep-chip" }, p)))), row("evidence", Array.isArray(f.evidence) && f.evidence.length > 0 && /* @__PURE__ */ React7.createElement("pre", { className: "secrep-pre secrep-pre-wrap" }, f.evidence.join("\n"))), row("patch", !!(f.suggested_patch && f.suggested_patch.trim()) && /* @__PURE__ */ React7.createElement("pre", { className: "secrep-pre" }, f.suggested_patch))));
+  const [copied, setCopied] = useState(false);
+  const copyFinding = async (event) => {
+    event.stopPropagation();
+    if (await copyToClipboard(JSON.stringify(f, null, 2))) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    }
+  };
+  return /* @__PURE__ */ React7.createElement("div", { className: "secrep-card" }, /* @__PURE__ */ React7.createElement("div", { className: "secrep-card-head", onClick: onToggle }, /* @__PURE__ */ React7.createElement("span", { className: "secrep-caret", style: { transform: open ? "rotate(90deg)" : "none" } }, /* @__PURE__ */ React7.createElement(Chevron, null)), /* @__PURE__ */ React7.createElement("span", { className: "secrep-dot", style: { background: SEVERITY_COLOR[sev] } }), /* @__PURE__ */ React7.createElement("span", { className: "secrep-card-title" }, f.title || f.run_finding_id || f.id), f.key && /* @__PURE__ */ React7.createElement("span", { className: "secrep-chip" }, f.key), f.recurring && /* @__PURE__ */ React7.createElement("span", { className: "secrep-chip" }, "recurring x", f.occurrences), /* @__PURE__ */ React7.createElement("button", { className: "secrep-btn secrep-copy-finding", type: "button", onClick: copyFinding }, copied ? "copied" : "copy")), open && /* @__PURE__ */ React7.createElement("div", { className: "secrep-card-body" }, row("class", f.vulnerability_class && /* @__PURE__ */ React7.createElement("span", { className: "secrep-chip" }, f.vulnerability_class)), row("boundary", text(f.trust_boundary)), row("flow", (f.entry_point || f.sink_or_decision) && /* @__PURE__ */ React7.createElement("span", { className: "secrep-mono" }, f.entry_point, f.entry_point && f.sink_or_decision ? " \u2192 " : "", f.sink_or_decision)), row("root cause", text(f.root_cause)), row("reachability", text(f.reachability)), row("impact", text(f.tenant_or_instance_impact)), row("rationale", text(f.severity_rationale)), row("fix", text(f.fix_recommendation)), row("paths", Array.isArray(f.affected_paths) && f.affected_paths.length > 0 && /* @__PURE__ */ React7.createElement("span", { className: "secrep-paths" }, f.affected_paths.map((p, i) => /* @__PURE__ */ React7.createElement("span", { key: i, className: "secrep-chip" }, p)))), row("evidence", Array.isArray(f.evidence) && f.evidence.length > 0 && /* @__PURE__ */ React7.createElement("pre", { className: "secrep-pre secrep-pre-wrap" }, f.evidence.join("\n"))), row("patch", !!(f.suggested_patch && f.suggested_patch.trim()) && /* @__PURE__ */ React7.createElement("pre", { className: "secrep-pre" }, f.suggested_patch))));
 }
 function text(v) {
   return v && String(v).trim() ? /* @__PURE__ */ React7.createElement("span", null, v) : null;

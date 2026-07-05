@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, fireEvent, cleanup, act, waitFor } from '@testing-library/react';
+import { render, fireEvent, cleanup, act, waitFor, within } from '@testing-library/react';
 import { SecurityReportView } from './SecurityReportView.jsx';
 
 const DOC = {
@@ -67,6 +67,15 @@ function okEnvelope(doc) {
     ok: true,
     json: async () => ({ path: 'kb/security-harness/reports/x.json', content: JSON.stringify(doc) }),
   };
+}
+
+function mockClipboard() {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText },
+  });
+  return writeText;
 }
 
 async function renderView(doc = DOC) {
@@ -145,6 +154,26 @@ describe('SecurityReportView — cards', () => {
     expect(pre.textContent).toContain('"DYS-9F8E7D6C"');
     fireEvent.click(getByText('rendered'));
     expect(container.querySelector('.secrep-card')).toBeTruthy();
+  });
+
+  it('copies the whole report as pretty JSON from rendered mode', async () => {
+    const writeText = mockClipboard();
+    const { getByRole } = await renderView();
+    fireEvent.click(getByRole('button', { name: 'copy report' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls[0][0]).toContain('"run_id": "sec-1751000000-1234"');
+    expect(writeText.mock.calls[0][0]).toContain('"findings": [');
+  });
+
+  it('copies one finding without toggling the card', async () => {
+    const writeText = mockClipboard();
+    const { getByText } = await renderView();
+    const card = getByText('Command injection in ping handler').closest('.secrep-card');
+    fireEvent.click(within(card).getByRole('button', { name: 'copy' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls[0][0]).toContain('"id": "F1"');
+    expect(writeText.mock.calls[0][0]).toContain('"fix_recommendation": "use subprocess list argv"');
+    expect(card.querySelector('.secrep-card-body')).toBeNull();
   });
 });
 

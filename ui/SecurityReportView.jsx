@@ -76,7 +76,7 @@ export function SecurityReportView({ reportPath, fallback, load = loadFromMindRo
   const [flagFilter, setFlagFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState(() => new Set());
-  const [copied, setCopied] = useState(false);
+  const [copiedReport, setCopiedReport] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,10 +118,10 @@ export function SecurityReportView({ reportPath, fallback, load = loadFromMindRo
     return next;
   });
 
-  const copyJson = async () => {
+  const copyReport = async () => {
     if (await copyToClipboard(JSON.stringify(doc, null, 2))) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
+      setCopiedReport(true);
+      setTimeout(() => setCopiedReport(false), 1200);
     }
   };
 
@@ -173,9 +173,9 @@ export function SecurityReportView({ reportPath, fallback, load = loadFromMindRo
                      value={query} onChange={e => setQuery(e.target.value)}/>
             </>
           )}
-          {view === 'json' && (
-            <button className="secrep-btn" onClick={copyJson}>{copied ? 'copied' : 'copy'}</button>
-          )}
+          <button className="secrep-btn" onClick={copyReport}>
+            {copiedReport ? 'copied' : 'copy report'}
+          </button>
           <span className="secrep-spacer"/>
           <button className="secrep-btn secrep-toggle" data-on={view === 'cards'}
                   onClick={() => setView('cards')}>rendered</button>
@@ -214,6 +214,15 @@ export function SecurityReportView({ reportPath, fallback, load = loadFromMindRo
 }
 
 function FindingCard({ finding: f, sev, open, onToggle }) {
+  const [copied, setCopied] = useState(false);
+  const copyFinding = async (event) => {
+    event.stopPropagation();
+    if (await copyToClipboard(JSON.stringify(f, null, 2))) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    }
+  };
+
   return (
     <div className="secrep-card">
       <div className="secrep-card-head" onClick={onToggle}>
@@ -224,6 +233,9 @@ function FindingCard({ finding: f, sev, open, onToggle }) {
         <span className="secrep-card-title">{f.title || f.run_finding_id || f.id}</span>
         {f.key && <span className="secrep-chip">{f.key}</span>}
         {f.recurring && <span className="secrep-chip">recurring x{f.occurrences}</span>}
+        <button className="secrep-btn secrep-copy-finding" type="button" onClick={copyFinding}>
+          {copied ? 'copied' : 'copy'}
+        </button>
       </div>
       {open && (
         <div className="secrep-card-body">

@@ -211,11 +211,23 @@
   font: 500 11px/1 var(--sans);
   cursor: pointer;
 }
-.secrep-btn:hover { color: var(--fg); background: var(--bg-2); }
+.secrep-btn:hover,
+.secrep-btn[data-copied="true"] {
+  color: var(--fg);
+  background: var(--bg-2);
+}
+.secrep-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .secrep-toggle[data-on="true"] {
   color: var(--fg);
   background: var(--bg-2);
   border-color: var(--border);
+}
+.secrep-copy-finding {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 .secrep-chip {
   display: inline-flex;
