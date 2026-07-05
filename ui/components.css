@@ -122,3 +122,193 @@
 .combobox-option[aria-selected="true"] { color: var(--accent); }
 .combobox-hint { color: var(--fg-muted); font-size: 11px; }
 .combobox-empty { padding: 6px 8px; color: var(--fg-muted); font-size: 13px; }
+
+/* ── <SecurityReportView> ─────────────────────────────────────────
+ * Severity-grouped finding entities. Self-contained: only .secrep-*
+ * classes + the design tokens above, so it renders the same in dyson
+ * and dyson-swarm and in light/dark. Severity dot colors are the
+ * shared four-level status palette (fixed, not tokens). */
+.secrep {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 24px 40px;
+  background: var(--bg);
+}
+.secrep-inner { max-width: 980px; margin: 0 auto; }
+.secrep-mono { font-family: var(--mono); }
+.secrep-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-1);
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.secrep-summary-count { font-weight: 600; color: var(--fg); }
+.secrep-summary-path {
+  min-width: 0;
+  max-width: min(48ch, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+}
+.secrep-sev { display: inline-flex; align-items: center; gap: 5px; }
+.secrep-sev-n { color: var(--fg); }
+.secrep-sev-label { font-variant: small-caps; letter-spacing: 0.5px; }
+.secrep-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.secrep-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 16px;
+}
+.secrep-spacer { flex: 1; }
+.secrep-select {
+  height: 26px;
+  padding: 0 8px;
+  background: var(--bg-1);
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font: 500 12px/1 var(--sans);
+}
+.secrep-search {
+  height: 26px;
+  padding: 0 9px;
+  flex: 1 1 140px;
+  min-width: 110px;
+  max-width: 260px;
+  background: var(--bg-1);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font: 400 12px/1 var(--mono);
+}
+.secrep-search:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.secrep-btn {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fg-muted);
+  font: 500 11px/1 var(--sans);
+  cursor: pointer;
+}
+.secrep-btn:hover { color: var(--fg); background: var(--bg-2); }
+.secrep-toggle[data-on="true"] {
+  color: var(--fg);
+  background: var(--bg-2);
+  border-color: var(--border);
+}
+.secrep-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font: 500 10.5px/1 var(--mono);
+  letter-spacing: 0.04em;
+  background: var(--bg-2);
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.secrep-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font: 500 10.5px/1 var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+.secrep-group { margin: 0 0 18px; }
+.secrep-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-1);
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+.secrep-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  min-width: 0;
+}
+.secrep-card-head:hover { background: var(--bg-2); }
+.secrep-caret {
+  color: var(--fg-faint);
+  display: inline-flex;
+  flex: 0 0 auto;
+  transition: transform 0.12s ease;
+}
+.secrep-card-title {
+  flex: 1 1 auto;
+  min-width: 140px;
+  font-size: 12.5px;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+.secrep-card-body {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 14px;
+  row-gap: 5px;
+  padding: 9px 12px 12px 30px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--fg-muted);
+}
+.secrep-label { color: var(--fg-faint); white-space: nowrap; }
+.secrep-value { min-width: 0; overflow-wrap: anywhere; }
+.secrep-paths { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.secrep-pre {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow-x: auto;
+  font: 400 11.5px/1.55 var(--mono);
+  color: var(--fg-muted);
+  white-space: pre;
+}
+.secrep-pre-wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.secrep-json-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-1);
+  overflow: auto;
+}
+.secrep-json {
+  margin: 0;
+  padding: 14px 16px;
+  font: 400 11.5px/1.6 var(--mono);
+  color: var(--fg-muted);
+}
+.secrep-empty { color: var(--fg-faint); font-size: 12.5px; padding: 14px 2px; }

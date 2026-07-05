@@ -220,8 +220,8 @@ function Combobox({
   const editing = query.trim() !== committedLabel.trim();
   const needle = editing ? query.trim().toLowerCase() : "";
   const visible = needle ? opts.filter((o) => o.label.toLowerCase().includes(needle) || String(o.value).toLowerCase().includes(needle)) : opts;
-  const exactMatch = (text) => {
-    const t = text.trim().toLowerCase();
+  const exactMatch = (text2) => {
+    const t = text2.trim().toLowerCase();
     if (!t) return null;
     return opts.find((o) => o.label.toLowerCase() === t || String(o.value).toLowerCase() === t) || null;
   };
@@ -511,15 +511,15 @@ function trimFixed(value, digits) {
 }
 
 // ui/clipboard.js
-async function copyToClipboard(text) {
-  if (!text) return false;
+async function copyToClipboard(text2) {
+  if (!text2) return false;
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(text2);
       return true;
     }
     const ta = document.createElement("textarea");
-    ta.value = text;
+    ta.value = text2;
     ta.style.position = "fixed";
     ta.style.opacity = "0";
     document.body.appendChild(ta);
@@ -596,6 +596,155 @@ function createThemeController({ storageKey, stripInstanceLabel = false }) {
   }
   return { getMode, resolvedTheme, applyMode, setMode, toggleTheme, initTheme };
 }
+
+// ui/SecurityReportView.jsx
+import React7, { useState, useEffect, useMemo } from "react";
+var SEVERITY_LABELS = ["critical", "high", "medium", "low"];
+var SEVERITY_COLOR = {
+  critical: "#cf2a2a",
+  high: "#d97706",
+  medium: "#ca8a04",
+  low: "#6b7280"
+};
+function severityBucket(sev) {
+  const s = String(sev || "").toLowerCase();
+  if (s === "critical" || s === "high" || s === "medium") return s;
+  return "low";
+}
+function matchesQuery(f, q) {
+  if (!q) return true;
+  const hay = [
+    f.title,
+    f.key,
+    f.vulnerability_class,
+    f.entry_point,
+    f.sink_or_decision,
+    f.root_cause,
+    ...Array.isArray(f.affected_paths) ? f.affected_paths : []
+  ].join("\n").toLowerCase();
+  return hay.includes(q);
+}
+async function loadFromMindRoute(reportPath) {
+  const r = await fetch("/api/mind/file?path=" + encodeURIComponent(reportPath), { credentials: "same-origin" });
+  if (!r.ok) throw new Error(String(r.status));
+  const payload = await r.json();
+  const parsed = JSON.parse(payload.content);
+  if (!parsed || !Array.isArray(parsed.findings)) throw new Error("bad doc");
+  return parsed;
+}
+function Chevron() {
+  return /* @__PURE__ */ React7.createElement(
+    "svg",
+    {
+      width: 10,
+      height: 10,
+      viewBox: "0 0 16 16",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: 1.5,
+      strokeLinecap: "round",
+      strokeLinejoin: "round"
+    },
+    /* @__PURE__ */ React7.createElement("path", { d: "m5 4 4 4-4 4" })
+  );
+}
+function SecurityReportView({ reportPath, fallback, load = loadFromMindRoute }) {
+  const [doc, setDoc] = useState(null);
+  const [unavailable, setUnavailable] = useState(false);
+  const [view, setView] = useState("cards");
+  const [sevFilter, setSevFilter] = useState("");
+  const [classFilter, setClassFilter] = useState("");
+  const [flagFilter, setFlagFilter] = useState("all");
+  const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState(() => /* @__PURE__ */ new Set());
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setDoc(null);
+    setUnavailable(false);
+    setExpanded(/* @__PURE__ */ new Set());
+    Promise.resolve().then(() => load(reportPath)).then((parsed) => {
+      if (!parsed || !Array.isArray(parsed.findings)) throw new Error("bad doc");
+      if (!cancelled) setDoc(parsed);
+    }).catch(() => {
+      if (!cancelled) setUnavailable(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reportPath, load]);
+  const classes = useMemo(() => {
+    if (!doc) return [];
+    const set = new Set(doc.findings.map((f) => f.vulnerability_class).filter(Boolean));
+    return [...set].sort();
+  }, [doc]);
+  if (unavailable || !doc) return fallback;
+  const q = query.trim().toLowerCase();
+  const visible = doc.findings.map((f, idx) => ({ f, idx })).filter(({ f }) => !sevFilter || severityBucket(f.severity) === sevFilter).filter(({ f }) => !classFilter || f.vulnerability_class === classFilter).filter(({ f }) => flagFilter === "all" || flagFilter === "recurring" === !!f.recurring).filter(({ f }) => matchesQuery(f, q));
+  const groups = SEVERITY_LABELS.map((sev) => ({ sev, items: visible.filter(({ f }) => severityBucket(f.severity) === sev) })).filter((g) => g.items.length > 0);
+  const toggle = (idx) => setExpanded((prev) => {
+    const next = new Set(prev);
+    if (next.has(idx)) next.delete(idx);
+    else next.add(idx);
+    return next;
+  });
+  const copyJson = async () => {
+    if (await copyToClipboard(JSON.stringify(doc, null, 2))) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    }
+  };
+  const summary = doc.summary || {};
+  return /* @__PURE__ */ React7.createElement("div", { className: "secrep" }, /* @__PURE__ */ React7.createElement("div", { className: "secrep-inner" }, /* @__PURE__ */ React7.createElement("div", { className: "secrep-summary" }, /* @__PURE__ */ React7.createElement("span", { className: "secrep-summary-count" }, doc.findings.length, " ", doc.findings.length === 1 ? "finding" : "findings"), SEVERITY_LABELS.map((sev) => {
+    const n = summary[sev] || 0;
+    if (!n) return null;
+    return /* @__PURE__ */ React7.createElement("span", { key: sev, className: "secrep-sev" }, /* @__PURE__ */ React7.createElement("span", { className: "secrep-dot", style: { background: SEVERITY_COLOR[sev] } }), /* @__PURE__ */ React7.createElement("span", { className: "secrep-sev-n" }, n), /* @__PURE__ */ React7.createElement("span", { className: "secrep-sev-label" }, sev));
+  }), /* @__PURE__ */ React7.createElement("span", null, summary.new || 0, " new \xB7 ", summary.recurring || 0, " recurring"), /* @__PURE__ */ React7.createElement("span", { className: "secrep-mono secrep-summary-path", title: doc.target && doc.target.repo_path }, doc.target && doc.target.repo_path), doc.model && doc.model.model && /* @__PURE__ */ React7.createElement("span", { className: "secrep-mono" }, doc.model.model)), /* @__PURE__ */ React7.createElement("div", { className: "secrep-controls" }, view === "cards" && /* @__PURE__ */ React7.createElement(React7.Fragment, null, /* @__PURE__ */ React7.createElement("select", { className: "secrep-select", value: sevFilter, onChange: (e) => setSevFilter(e.target.value) }, /* @__PURE__ */ React7.createElement("option", { value: "" }, "all severities"), SEVERITY_LABELS.map((s) => /* @__PURE__ */ React7.createElement("option", { key: s, value: s }, s))), classes.length > 0 && /* @__PURE__ */ React7.createElement("select", { className: "secrep-select", value: classFilter, onChange: (e) => setClassFilter(e.target.value) }, /* @__PURE__ */ React7.createElement("option", { value: "" }, "all classes"), classes.map((c) => /* @__PURE__ */ React7.createElement("option", { key: c, value: c }, c))), /* @__PURE__ */ React7.createElement("select", { className: "secrep-select", value: flagFilter, onChange: (e) => setFlagFilter(e.target.value) }, /* @__PURE__ */ React7.createElement("option", { value: "all" }, "new + recurring"), /* @__PURE__ */ React7.createElement("option", { value: "new" }, "new"), /* @__PURE__ */ React7.createElement("option", { value: "recurring" }, "recurring")), /* @__PURE__ */ React7.createElement(
+    "input",
+    {
+      className: "secrep-search",
+      type: "search",
+      placeholder: "search",
+      value: query,
+      onChange: (e) => setQuery(e.target.value)
+    }
+  )), view === "json" && /* @__PURE__ */ React7.createElement("button", { className: "secrep-btn", onClick: copyJson }, copied ? "copied" : "copy"), /* @__PURE__ */ React7.createElement("span", { className: "secrep-spacer" }), /* @__PURE__ */ React7.createElement(
+    "button",
+    {
+      className: "secrep-btn secrep-toggle",
+      "data-on": view === "cards",
+      onClick: () => setView("cards")
+    },
+    "rendered"
+  ), /* @__PURE__ */ React7.createElement(
+    "button",
+    {
+      className: "secrep-btn secrep-toggle",
+      "data-on": view === "json",
+      onClick: () => setView("json")
+    },
+    "json"
+  )), view === "json" ? /* @__PURE__ */ React7.createElement("div", { className: "secrep-json-wrap" }, /* @__PURE__ */ React7.createElement("pre", { className: "secrep-json" }, JSON.stringify(doc, null, 2))) : /* @__PURE__ */ React7.createElement(React7.Fragment, null, visible.length === 0 && /* @__PURE__ */ React7.createElement("div", { className: "secrep-empty" }, doc.findings.length === 0 ? "No confirmed findings." : "No findings match."), groups.map(({ sev, items }) => /* @__PURE__ */ React7.createElement("div", { key: sev, className: "secrep-group" }, /* @__PURE__ */ React7.createElement("div", { className: "secrep-eyebrow" }, /* @__PURE__ */ React7.createElement("span", { className: "secrep-dot", style: { background: SEVERITY_COLOR[sev] } }), sev, " \xB7 ", items.length), items.map(({ f, idx }) => /* @__PURE__ */ React7.createElement(
+    FindingCard,
+    {
+      key: idx,
+      finding: f,
+      sev: severityBucket(f.severity),
+      open: expanded.has(idx),
+      onToggle: () => toggle(idx)
+    }
+  )))))));
+}
+function FindingCard({ finding: f, sev, open, onToggle }) {
+  return /* @__PURE__ */ React7.createElement("div", { className: "secrep-card" }, /* @__PURE__ */ React7.createElement("div", { className: "secrep-card-head", onClick: onToggle }, /* @__PURE__ */ React7.createElement("span", { className: "secrep-caret", style: { transform: open ? "rotate(90deg)" : "none" } }, /* @__PURE__ */ React7.createElement(Chevron, null)), /* @__PURE__ */ React7.createElement("span", { className: "secrep-dot", style: { background: SEVERITY_COLOR[sev] } }), /* @__PURE__ */ React7.createElement("span", { className: "secrep-card-title" }, f.title || f.run_finding_id || f.id), f.key && /* @__PURE__ */ React7.createElement("span", { className: "secrep-chip" }, f.key), f.recurring && /* @__PURE__ */ React7.createElement("span", { className: "secrep-chip" }, "recurring x", f.occurrences)), open && /* @__PURE__ */ React7.createElement("div", { className: "secrep-card-body" }, row("class", f.vulnerability_class && /* @__PURE__ */ React7.createElement("span", { className: "secrep-chip" }, f.vulnerability_class)), row("boundary", text(f.trust_boundary)), row("flow", (f.entry_point || f.sink_or_decision) && /* @__PURE__ */ React7.createElement("span", { className: "secrep-mono" }, f.entry_point, f.entry_point && f.sink_or_decision ? " \u2192 " : "", f.sink_or_decision)), row("root cause", text(f.root_cause)), row("reachability", text(f.reachability)), row("impact", text(f.tenant_or_instance_impact)), row("rationale", text(f.severity_rationale)), row("fix", text(f.fix_recommendation)), row("paths", Array.isArray(f.affected_paths) && f.affected_paths.length > 0 && /* @__PURE__ */ React7.createElement("span", { className: "secrep-paths" }, f.affected_paths.map((p, i) => /* @__PURE__ */ React7.createElement("span", { key: i, className: "secrep-chip" }, p)))), row("evidence", Array.isArray(f.evidence) && f.evidence.length > 0 && /* @__PURE__ */ React7.createElement("pre", { className: "secrep-pre secrep-pre-wrap" }, f.evidence.join("\n"))), row("patch", !!(f.suggested_patch && f.suggested_patch.trim()) && /* @__PURE__ */ React7.createElement("pre", { className: "secrep-pre" }, f.suggested_patch))));
+}
+function text(v) {
+  return v && String(v).trim() ? /* @__PURE__ */ React7.createElement("span", null, v) : null;
+}
+function row(label, value) {
+  if (!value) return null;
+  return /* @__PURE__ */ React7.createElement(React7.Fragment, { key: label }, /* @__PURE__ */ React7.createElement("span", { className: "secrep-label" }, label), /* @__PURE__ */ React7.createElement("span", { className: "secrep-value" }, value));
+}
 export {
   Combobox,
   ComputerMark,
@@ -604,6 +753,7 @@ export {
   DysonMark,
   EmptyState,
   Modal,
+  SecurityReportView,
   MODES as THEME_MODES,
   base64url,
   copyToClipboard,
