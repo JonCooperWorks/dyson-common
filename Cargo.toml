@@ -1,6 +1,6 @@
 [package]
 name = "dyson-common"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2024"
 license = "MIT"
 description = "Shared wire contracts and primitives for dyson and dyson-swarm (tokens, OAuth/MCP-auth, cost, feedback, skill-marketplace)."
@@ -16,15 +16,15 @@ subtle = "2"
 
 # OAuth flow client (reqwest + PKCE crypto) — only pulled in by consumers that
 # run the flow (dyson auth, swarm mcp_servers). Pure DTOs need none of this.
-reqwest = { version = "0.12", optional = true, default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.13", optional = true, default-features = false, features = ["json", "form", "rustls"] }
 base64 = { version = "0.22", optional = true }
-rand = { version = "0.8", optional = true }
+rand = { version = "0.10", optional = true }
 sha2 = { version = "0.10", optional = true }
 
 # OIDC JWKS key construction — only consumers that verify inbound JWTs.
-# Must match the version both repos use (10.3, rust_crypto backend) so the
+# Must match the version both repos use (10.4, rust_crypto backend) so the
 # returned DecodingKey unifies across the git-dependency boundary.
-jsonwebtoken = { version = "10.3", optional = true, default-features = false, features = ["rust_crypto"] }
+jsonwebtoken = { version = "10.4", optional = true, default-features = false, features = ["rust_crypto"] }
 
 [features]
 default = []

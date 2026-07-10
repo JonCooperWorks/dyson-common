@@ -16,7 +16,7 @@
 //!   flow cache — those lifecycles stay in each repo on top of this.
 
 use base64::Engine as _;
-use rand::RngCore as _;
+use rand::RngExt as _;
 use sha2::{Digest as _, Sha256};
 
 use super::{
@@ -94,7 +94,7 @@ fn err_kind(e: &reqwest::Error) -> &'static str {
 
 fn random_b64_32() -> String {
     let mut bytes = [0u8; 32];
-    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    rand::rng().fill(&mut bytes);
     B64.encode(bytes)
 }
 
