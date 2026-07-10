@@ -10,7 +10,20 @@ export { createUseAppState } from './store.js';
 export { base64url, randomString, pkceChallenge } from './pkce.js';
 export { downloadBlob } from './download.js';
 export { useEscapeKey } from './useEscapeKey.js';
-export { DysonMark, ComputerMark, DYSON_BLUE } from './DysonMark.jsx';
+export {
+  DysonMark,
+  ComputerMark,
+  Glyph as DysonGlyph,
+  DYSON_BLUE,
+  setBrandMarkVariant,
+  useBrandMarkVariant,
+} from './DysonMark.jsx';
+export {
+  MARK_VARIANTS,
+  MARK_VARIANT_LABELS,
+  MARK_VARIANT_NAMES,
+  DEFAULT_MARK_VARIANT,
+} from './marks.js';
 export {
   formatUsd,
   formatBalance,

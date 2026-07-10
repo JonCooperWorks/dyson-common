@@ -1,45 +1,58 @@
-import React from 'react';
+import React, { useSyncExternalStore } from 'react';
+import { createStore } from './createStore.js';
+import { MARK_VARIANTS, DEFAULT_MARK_VARIANT } from './marks.js';
 
-// The Dyson-swarm mark: a flat, single-colour ring of collector panels with
-// two lifting off (the swarm) around a solid core. No gradients, glow, or
-// strokes — a clean geometric glyph in the spirit of the OpenAI / Anthropic
-// marks, tinted the Dyson brand blue by default. Pass `color` to override the
-// fill (e.g. "currentColor" or white on a coloured tile).
-
-// Collector panels, origin-centred. The last two are lifted outward at the
-// top-right — the swarm breaking away from the shell.
-const PANELS = [
-  'M56.9,-11.1 L94.2,-18.3 L94.2,18.3 L56.9,11.1Z',
-  'M54.8,18.9 L90.8,31.3 L72.5,63.0 L43.8,38.1Z',
-  'M38.1,43.8 L63.0,72.5 L31.3,90.8 L18.9,54.8Z',
-  'M11.1,56.9 L18.3,94.2 L-18.3,94.2 L-11.1,56.9Z',
-  'M-18.9,54.8 L-31.3,90.8 L-63.0,72.5 L-38.1,43.8Z',
-  'M-43.8,38.1 L-72.5,63.0 L-90.8,31.3 L-54.8,18.9Z',
-  'M-56.9,11.1 L-94.2,18.3 L-94.2,-18.3 L-56.9,-11.1Z',
-  'M-54.8,-18.9 L-90.8,-31.3 L-72.5,-63.0 L-43.8,-38.1Z',
-  'M-38.1,-43.8 L-63.0,-72.5 L-31.3,-90.8 L-18.9,-54.8Z',
-  'M-11.1,-56.9 L-18.3,-94.2 L18.3,-94.2 L11.1,-56.9Z',
-  'M22.8,-66.2 L35.2,-102.1 L70.9,-81.5 L45.9,-52.8Z',
-  'M52.8,-45.9 L81.5,-70.9 L102.1,-35.2 L66.2,-22.8Z',
-];
-const SHELL = PANELS.join(' ');
+// The Dyson brand mark: flat, single-colour glyphs in the spirit of the
+// OpenAI / Anthropic marks, tinted the Dyson brand blue by default. The
+// glyph geometry lives in ./marks.js as one of several selectable variants
+// ('classic' is the original collector-panel ring). Which variant renders is
+// a prop, falling back to an app-wide default that the host app sets from
+// its runtime config via setBrandMarkVariant — every mounted mark re-renders
+// live when it changes.
 
 // Default brand blue — reads on both light and dark surfaces.
 export const DYSON_BLUE = '#3b82f6';
 
-// The bare mark (shell + core), origin-centred, ready to drop into a viewBox
-// or transform.
-function Glyph({ color }) {
-  return (
-    <>
-      <path d={SHELL} fill={color}/>
-      <circle r="26" fill={color}/>
-    </>
-  );
+const markStore = createStore({ variant: DEFAULT_MARK_VARIANT });
+
+export function setBrandMarkVariant(variant) {
+  const next = MARK_VARIANTS[variant] ? variant : DEFAULT_MARK_VARIANT;
+  markStore.dispatch((s) => (s.variant === next ? s : { variant: next }));
+}
+
+export function useBrandMarkVariant() {
+  return useSyncExternalStore(markStore.subscribe, () => markStore.getSnapshot().variant);
+}
+
+// The bare mark, origin-centred in the shared -112..112 design box, ready to
+// drop into a viewBox or transform. Shape kinds are documented in marks.js.
+export function Glyph({ color, variant }) {
+  const shapes = MARK_VARIANTS[variant] ?? MARK_VARIANTS[DEFAULT_MARK_VARIANT];
+  return shapes.map((s, i) => {
+    switch (s.t) {
+      case 'c':
+        return <circle key={i} cx={s.cx} cy={s.cy} r={s.r} fill={color}/>;
+      case 'e':
+        return <path key={i} d={s.d} fill={color} fillRule="evenodd"/>;
+      case 's':
+        return (
+          <path key={i} d={s.d} fill="none" stroke={color} strokeWidth={s.w}
+            strokeLinecap="round" strokeLinejoin="round"/>
+        );
+      case 'r':
+        return (
+          <path key={i} d={s.d} fill={color} stroke={color} strokeWidth={s.w}
+            strokeLinejoin="round"/>
+        );
+      default:
+        return <path key={i} d={s.d} fill={color}/>;
+    }
+  });
 }
 
 // Standalone brand mark. Transparent ground; the surface shows through.
-export function DysonMark({ size = 24, color = DYSON_BLUE, title = 'Dyson', ...rest }) {
+export function DysonMark({ size = 24, color = DYSON_BLUE, title = 'Dyson', variant, ...rest }) {
+  const appVariant = useBrandMarkVariant();
   return (
     <svg
       width={size}
@@ -50,7 +63,7 @@ export function DysonMark({ size = 24, color = DYSON_BLUE, title = 'Dyson', ...r
       style={{ display: 'block' }}
       {...rest}
     >
-      <Glyph color={color}/>
+      <Glyph color={color} variant={variant ?? appVariant}/>
     </svg>
   );
 }
@@ -58,7 +71,8 @@ export function DysonMark({ size = 24, color = DYSON_BLUE, title = 'Dyson', ...r
 // The Computer-kind mark: the Dyson mark framed inside a monitor. The monitor
 // inherits currentColor (theme ink) so it reads on any card; the mark keeps
 // its brand blue.
-export function ComputerMark({ size = 24, color = DYSON_BLUE, title = 'Dyson Computer', ...rest }) {
+export function ComputerMark({ size = 24, color = DYSON_BLUE, title = 'Dyson Computer', variant, ...rest }) {
+  const appVariant = useBrandMarkVariant();
   return (
     <svg
       width={size}
@@ -73,7 +87,7 @@ export function ComputerMark({ size = 24, color = DYSON_BLUE, title = 'Dyson Com
       <rect x="108" y="160" width="24" height="26" fill="currentColor"/>
       <rect x="74" y="186" width="92" height="14" rx="7" fill="currentColor"/>
       <g transform="translate(120,84) scale(0.62)">
-        <Glyph color={color}/>
+        <Glyph color={color} variant={variant ?? appVariant}/>
       </g>
     </svg>
   );
