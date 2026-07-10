@@ -718,7 +718,7 @@ var MARK_VARIANT_LABELS = {
   "constellation": "Constellation"
 };
 var MARK_VARIANT_NAMES = Object.keys(MARK_VARIANTS);
-var DEFAULT_MARK_VARIANT = "classic";
+var DEFAULT_MARK_VARIANT = "orbits";
 
 // ui/DysonMark.jsx
 var DYSON_BLUE = "#3b82f6";

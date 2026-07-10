@@ -312,4 +312,4 @@ export const MARK_VARIANT_LABELS = {
 
 export const MARK_VARIANT_NAMES = Object.keys(MARK_VARIANTS);
 
-export const DEFAULT_MARK_VARIANT = 'classic';
+export const DEFAULT_MARK_VARIANT = 'orbits';
