@@ -35,3 +35,5 @@ export {
 export { copyToClipboard } from './clipboard.js';
 export { createThemeController, MODES as THEME_MODES } from './theme.js';
 export { SecurityReportView } from './SecurityReportView.jsx';
+export { EvalResultsView } from './EvalResultsView.jsx';
+export { EvalReportView } from './EvalReportView.jsx';

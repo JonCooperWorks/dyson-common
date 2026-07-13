@@ -324,3 +324,149 @@
   color: var(--fg-muted);
 }
 .secrep-empty { color: var(--fg-faint); font-size: 12.5px; padding: 14px 2px; }
+
+/* ── Eval results (EvalResultsView / EvalReportView) ───────────────────────
+ * Self-contained: only .evalrep-* + design tokens, so the operator's Evals run
+ * page and the in-agent EvalReport card render identically in light/dark.
+ */
+.evalrep { font: 400 13px/1.5 var(--sans); color: var(--fg); }
+.evalrep-title { font-size: 13px; font-weight: 650; margin-bottom: 12px; }
+.evalrep-section-label {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--fg-faint); margin-bottom: 8px;
+}
+.evalrep-mono { font-family: var(--mono); font-size: 11.5px; color: var(--fg-muted); }
+.evalrep-muted { color: var(--fg-faint); }
+
+/* Progress (pending / running) */
+.evalrep-progress {
+  display: flex; align-items: center; gap: 10px;
+  padding: 18px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-1); color: var(--fg-muted); font-size: 12.5px;
+}
+.evalrep-spinner {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  animation: evalrep-spin 0.8s linear infinite;
+}
+@keyframes evalrep-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .evalrep-spinner { animation: none; } }
+
+.evalrep-fatal {
+  padding: 12px 14px; margin-bottom: 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-1));
+  color: var(--fg); font-size: 12.5px;
+}
+
+/* Verdict banner */
+.evalrep-verdict {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-1); padding: 16px 18px; margin-bottom: 16px;
+  border-left: 4px solid var(--border);
+}
+.evalrep-verdict-ok { border-left-color: var(--ok); }
+.evalrep-verdict-fail { border-left-color: var(--danger); }
+.evalrep-verdict-error { border-left-color: var(--warn); }
+.evalrep-verdict-pending { border-left-color: var(--accent); }
+.evalrep-verdict-main { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.evalrep-verdict-badge {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+  padding: 3px 9px; border-radius: 999px; color: var(--on-solid);
+}
+.evalrep-verdict-ok .evalrep-verdict-badge { background: var(--ok); }
+.evalrep-verdict-fail .evalrep-verdict-badge { background: var(--danger); }
+.evalrep-verdict-error .evalrep-verdict-badge { background: var(--warn); }
+.evalrep-verdict-score { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.evalrep-verdict-threshold { font-size: 12px; color: var(--fg-faint); }
+.evalrep-verdict-gauge { margin: 12px 0 10px; }
+.evalrep-gauge-track {
+  position: relative; display: block; height: 8px; border-radius: 999px;
+  background: var(--bg-2); overflow: hidden;
+}
+.evalrep-gauge-fill { position: absolute; inset: 0 auto 0 0; height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+.evalrep-gauge-threshold {
+  position: absolute; top: -2px; bottom: -2px; width: 2px;
+  background: var(--fg); opacity: 0.55; transform: translateX(-50%);
+}
+.evalrep-fill-ok { background: var(--ok); }
+.evalrep-fill-fail { background: var(--danger); }
+.evalrep-fill-error { background: var(--warn); }
+.evalrep-fill-pending, .evalrep-fill-accent { background: var(--accent); }
+.evalrep-verdict-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--fg-muted); }
+.evalrep-meta-error { color: var(--danger); }
+
+/* Trend sparkline */
+.evalrep-trend {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin-bottom: 16px; padding: 10px 14px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-1);
+}
+.evalrep-trend-label { font-size: 11px; color: var(--fg-faint); white-space: nowrap; }
+.evalrep-trend-svg { flex: 1; min-width: 160px; height: 44px; overflow: visible; }
+.evalrep-trend-line { stroke: var(--accent); stroke-width: 1.75; }
+.evalrep-trend-threshold { stroke: var(--fg-faint); stroke-width: 1; }
+.evalrep-trend-dot { stroke: var(--bg-1); stroke-width: 1.25; }
+.evalrep-dot-ok { fill: var(--ok); }
+.evalrep-dot-fail { fill: var(--danger); }
+
+/* Per-dimension meters */
+.evalrep-dims { margin-bottom: 18px; }
+.evalrep-meter { display: grid; grid-template-columns: minmax(90px, 160px) 1fr 52px; align-items: center; gap: 12px; padding: 4px 0; }
+.evalrep-meter-label { font-size: 12.5px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.evalrep-meter-track { height: 8px; border-radius: 999px; background: var(--bg-2); overflow: hidden; }
+.evalrep-meter-fill { display: block; height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+.evalrep-meter-value { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--fg-muted); text-align: right; }
+
+/* Case table */
+.evalrep-table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; }
+.evalrep-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.evalrep-table thead th {
+  text-align: left; font-weight: 600; font-size: 11px; letter-spacing: 0.03em;
+  color: var(--fg-faint); padding: 9px 12px; border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.evalrep-th-dim { text-transform: none; }
+.evalrep-case-row { cursor: pointer; border-bottom: 1px solid var(--border); }
+.evalrep-case-row:hover { background: var(--bg-2); }
+.evalrep-case-row > td { padding: 9px 12px; vertical-align: middle; }
+.evalrep-case-toggle { width: 24px; color: var(--fg-faint); }
+.evalrep-caret { display: inline-flex; transition: transform 0.15s ease; }
+.evalrep-case-id { font-family: var(--mono); font-size: 11.5px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.evalrep-case-errored .evalrep-case-id { color: var(--fg-muted); }
+.evalrep-case-dim { min-width: 96px; }
+.evalrep-dimcell { display: flex; align-items: center; gap: 7px; }
+.evalrep-dimbar { flex: 1; height: 5px; border-radius: 999px; background: var(--bg-2); overflow: hidden; min-width: 34px; }
+.evalrep-dimbar-fill { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.evalrep-dimcell-val { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--fg-muted); min-width: 40px; text-align: right; }
+.evalrep-case-score { font-weight: 650; font-variant-numeric: tabular-nums; }
+.evalrep-chip {
+  display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--fg-muted);
+}
+.evalrep-chip-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
+.evalrep-chip-error { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+
+/* Expanded case detail */
+.evalrep-case-detail-row > td { padding: 0; background: var(--bg-2); border-bottom: 1px solid var(--border); }
+.evalrep-case-detail { padding: 14px 16px 16px 36px; display: grid; gap: 12px; }
+.evalrep-error-note {
+  font-size: 12px; color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  border-radius: 4px; padding: 6px 10px;
+}
+.evalrep-detail-block { display: grid; gap: 4px; }
+.evalrep-detail-label { font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--fg-faint); }
+.evalrep-pre {
+  margin: 0; padding: 10px 12px; background: var(--bg-1); border: 1px solid var(--border);
+  border-radius: 4px; overflow-x: auto; font: 400 11.5px/1.55 var(--mono);
+  color: var(--fg-muted); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px;
+}
+.evalrep-rationales { display: grid; gap: 10px; }
+.evalrep-rationale { border: 1px solid var(--border); border-radius: 4px; background: var(--bg-1); padding: 9px 11px; }
+.evalrep-rationale-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.evalrep-rationale-key { font-weight: 650; font-size: 12px; }
+.evalrep-rationale-score { font-variant-numeric: tabular-nums; font-size: 11.5px; color: var(--fg-muted); }
+.evalrep-rationale-text { font-size: 12px; line-height: 1.55; color: var(--fg-muted); white-space: pre-wrap; }

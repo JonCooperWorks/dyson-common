@@ -1094,6 +1094,225 @@ function row(label, value) {
   if (!value) return null;
   return /* @__PURE__ */ React7.createElement(React7.Fragment, { key: label }, /* @__PURE__ */ React7.createElement("span", { className: "secrep-label" }, label), /* @__PURE__ */ React7.createElement("span", { className: "secrep-value" }, value));
 }
+
+// ui/EvalResultsView.jsx
+import React8, { useState as useState2 } from "react";
+var TERMINAL = /* @__PURE__ */ new Set(["passed", "failed", "error"]);
+function pct(x) {
+  if (!Number.isFinite(x)) return "\u2014";
+  return `${(x * 100).toFixed(1)}%`;
+}
+function statusTone(status) {
+  if (status === "passed") return "ok";
+  if (status === "failed") return "fail";
+  if (status === "error") return "error";
+  return "pending";
+}
+function Chevron2() {
+  return /* @__PURE__ */ React8.createElement(
+    "svg",
+    {
+      width: 10,
+      height: 10,
+      viewBox: "0 0 16 16",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: 1.5,
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      "aria-hidden": "true"
+    },
+    /* @__PURE__ */ React8.createElement("path", { d: "m5 4 4 4-4 4" })
+  );
+}
+function Meter({ label, value, tone = "accent", title }) {
+  const clamped = Math.max(0, Math.min(1, Number(value) || 0));
+  return /* @__PURE__ */ React8.createElement("div", { className: "evalrep-meter", title }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-meter-label" }, label), /* @__PURE__ */ React8.createElement("span", { className: "evalrep-meter-track" }, /* @__PURE__ */ React8.createElement(
+    "span",
+    {
+      className: `evalrep-meter-fill evalrep-fill-${tone}`,
+      style: { width: `${clamped * 100}%` }
+    }
+  )), /* @__PURE__ */ React8.createElement("span", { className: "evalrep-meter-value" }, pct(clamped)));
+}
+function TrendSparkline({ history, threshold }) {
+  const points = (history || []).map((r) => ({
+    score: Number(r?.score),
+    passed: r?.status === "passed"
+  })).filter((p) => Number.isFinite(p.score));
+  if (points.length < 2) return null;
+  const W = 240;
+  const H = 44;
+  const pad = 4;
+  const n = points.length;
+  const x = (i) => pad + i * (W - 2 * pad) / (n - 1);
+  const y = (s) => H - pad - s * (H - 2 * pad);
+  const path = points.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.score).toFixed(1)}`).join(" ");
+  const thr = Number.isFinite(threshold) ? y(threshold) : null;
+  return /* @__PURE__ */ React8.createElement("div", { className: "evalrep-trend" }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-trend-label" }, "score trend \xB7 ", n, " runs"), /* @__PURE__ */ React8.createElement(
+    "svg",
+    {
+      className: "evalrep-trend-svg",
+      viewBox: `0 0 ${W} ${H}`,
+      width: W,
+      height: H,
+      preserveAspectRatio: "none",
+      role: "img",
+      "aria-label": "score trend across runs"
+    },
+    thr != null && /* @__PURE__ */ React8.createElement(
+      "line",
+      {
+        x1: 0,
+        x2: W,
+        y1: thr,
+        y2: thr,
+        className: "evalrep-trend-threshold",
+        strokeDasharray: "3 3"
+      }
+    ),
+    /* @__PURE__ */ React8.createElement("path", { d: path, className: "evalrep-trend-line", fill: "none" }),
+    points.map((p, i) => /* @__PURE__ */ React8.createElement(
+      "circle",
+      {
+        key: i,
+        cx: x(i),
+        cy: y(p.score),
+        r: 2.6,
+        className: `evalrep-trend-dot evalrep-dot-${p.passed ? "ok" : "fail"}`
+      }
+    ))
+  ));
+}
+function CaseRow({ c, dimKeys, open, onToggle }) {
+  const errored = !!c.error;
+  const byKey = new Map((c.dimensions || []).map((d) => [d.key, d]));
+  return /* @__PURE__ */ React8.createElement(React8.Fragment, null, /* @__PURE__ */ React8.createElement("tr", { className: `evalrep-case-row${errored ? " evalrep-case-errored" : ""}`, onClick: onToggle }, /* @__PURE__ */ React8.createElement("td", { className: "evalrep-case-toggle" }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-caret", style: { transform: open ? "rotate(90deg)" : "none" } }, /* @__PURE__ */ React8.createElement(Chevron2, null))), /* @__PURE__ */ React8.createElement("td", { className: "evalrep-case-id", title: c.case_id }, c.case_id), dimKeys.map((k) => {
+    const d = byKey.get(k);
+    return /* @__PURE__ */ React8.createElement("td", { key: k, className: "evalrep-case-dim" }, d ? /* @__PURE__ */ React8.createElement("span", { className: "evalrep-dimcell", title: `raw ${d.score}` }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-dimbar" }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-dimbar-fill", style: { width: `${Math.max(0, Math.min(1, d.normalized)) * 100}%` } })), /* @__PURE__ */ React8.createElement("span", { className: "evalrep-dimcell-val" }, pct(d.normalized))) : /* @__PURE__ */ React8.createElement("span", { className: "evalrep-muted" }, "\u2014"));
+  }), /* @__PURE__ */ React8.createElement("td", { className: "evalrep-case-score" }, errored ? /* @__PURE__ */ React8.createElement("span", { className: "evalrep-muted" }, "\u2014") : pct(c.case_score)), /* @__PURE__ */ React8.createElement("td", { className: "evalrep-case-state" }, errored ? /* @__PURE__ */ React8.createElement("span", { className: "evalrep-chip evalrep-chip-error" }, "error") : /* @__PURE__ */ React8.createElement("span", { className: "evalrep-chip evalrep-chip-ok" }, "scored"))), open && /* @__PURE__ */ React8.createElement("tr", { className: "evalrep-case-detail-row" }, /* @__PURE__ */ React8.createElement("td", { colSpan: dimKeys.length + 4 }, /* @__PURE__ */ React8.createElement("div", { className: "evalrep-case-detail" }, errored && /* @__PURE__ */ React8.createElement("div", { className: "evalrep-error-note" }, c.error), /* @__PURE__ */ React8.createElement(DetailBlock, { label: "input", value: c.input }), /* @__PURE__ */ React8.createElement(DetailBlock, { label: "reference", value: c.reference }), /* @__PURE__ */ React8.createElement(DetailBlock, { label: "candidate output", value: c.output, truncated: c.output_truncated }), (c.dimensions || []).length > 0 && /* @__PURE__ */ React8.createElement("div", { className: "evalrep-rationales" }, c.dimensions.map((d) => /* @__PURE__ */ React8.createElement("div", { key: d.key, className: "evalrep-rationale" }, /* @__PURE__ */ React8.createElement("div", { className: "evalrep-rationale-head" }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-rationale-key" }, d.key), /* @__PURE__ */ React8.createElement("span", { className: "evalrep-rationale-score" }, d.score, " \xB7 ", pct(d.normalized))), /* @__PURE__ */ React8.createElement("div", { className: "evalrep-rationale-text" }, d.rationale))))))));
+}
+function DetailBlock({ label, value, truncated }) {
+  if (value == null || value === "") return null;
+  return /* @__PURE__ */ React8.createElement("div", { className: "evalrep-detail-block" }, /* @__PURE__ */ React8.createElement("div", { className: "evalrep-detail-label" }, label, truncated ? /* @__PURE__ */ React8.createElement("span", { className: "evalrep-muted" }, " \xB7 truncated") : null), /* @__PURE__ */ React8.createElement("pre", { className: "evalrep-pre" }, value));
+}
+function EvalResultsView({ results, status, history, title }) {
+  const [expanded, setExpanded] = useState2(() => /* @__PURE__ */ new Set());
+  const isTerminal = TERMINAL.has(status) || results && (results.error || results.aggregate);
+  if (!results || !results.aggregate) {
+    if (isTerminal && results && results.error) {
+      return /* @__PURE__ */ React8.createElement("div", { className: "evalrep" }, title ? /* @__PURE__ */ React8.createElement("div", { className: "evalrep-title" }, title) : null, /* @__PURE__ */ React8.createElement("div", { className: "evalrep-fatal" }, results.error));
+    }
+    const s = status || "pending";
+    return /* @__PURE__ */ React8.createElement("div", { className: "evalrep" }, title ? /* @__PURE__ */ React8.createElement("div", { className: "evalrep-title" }, title) : null, /* @__PURE__ */ React8.createElement("div", { className: `evalrep-progress evalrep-progress-${statusTone(s)}` }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-spinner", "aria-hidden": "true" }), /* @__PURE__ */ React8.createElement("span", { className: "evalrep-progress-label" }, s === "running" ? "running evaluation\u2026" : "queued\u2026")));
+  }
+  const agg = results.aggregate;
+  const perDim = agg.per_dimension || {};
+  const dimKeys = Object.keys(perDim);
+  const runStatus = status || (agg.pass ? "passed" : "failed");
+  const fatal = results.error;
+  const toggle = (idx) => setExpanded((prev) => {
+    const next = new Set(prev);
+    if (next.has(idx)) next.delete(idx);
+    else next.add(idx);
+    return next;
+  });
+  return /* @__PURE__ */ React8.createElement("div", { className: "evalrep" }, title ? /* @__PURE__ */ React8.createElement("div", { className: "evalrep-title" }, title) : null, fatal ? /* @__PURE__ */ React8.createElement("div", { className: "evalrep-fatal" }, fatal) : null, /* @__PURE__ */ React8.createElement("div", { className: `evalrep-verdict evalrep-verdict-${statusTone(runStatus)}` }, /* @__PURE__ */ React8.createElement("div", { className: "evalrep-verdict-main" }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-verdict-badge" }, runStatus === "passed" ? "PASS" : runStatus === "failed" ? "FAIL" : "ERROR"), /* @__PURE__ */ React8.createElement("span", { className: "evalrep-verdict-score" }, pct(agg.score)), /* @__PURE__ */ React8.createElement("span", { className: "evalrep-verdict-threshold" }, "vs ", pct(agg.pass_threshold), " threshold")), /* @__PURE__ */ React8.createElement("div", { className: "evalrep-verdict-gauge" }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-gauge-track" }, /* @__PURE__ */ React8.createElement(
+    "span",
+    {
+      className: `evalrep-gauge-fill evalrep-fill-${statusTone(runStatus)}`,
+      style: { width: `${Math.max(0, Math.min(1, agg.score)) * 100}%` }
+    }
+  ), /* @__PURE__ */ React8.createElement(
+    "span",
+    {
+      className: "evalrep-gauge-threshold",
+      style: { left: `${Math.max(0, Math.min(1, agg.pass_threshold)) * 100}%` }
+    }
+  ))), /* @__PURE__ */ React8.createElement("div", { className: "evalrep-verdict-meta" }, /* @__PURE__ */ React8.createElement("span", null, agg.cases_total, " case", agg.cases_total === 1 ? "" : "s"), agg.cases_errored > 0 ? /* @__PURE__ */ React8.createElement("span", { className: "evalrep-meta-error" }, agg.cases_errored, " errored") : null, results.judge_model ? /* @__PURE__ */ React8.createElement("span", { className: "evalrep-mono" }, "judge \xB7 ", results.judge_model) : null)), /* @__PURE__ */ React8.createElement(TrendSparkline, { history, threshold: agg.pass_threshold }), dimKeys.length > 0 && /* @__PURE__ */ React8.createElement("div", { className: "evalrep-dims" }, /* @__PURE__ */ React8.createElement("div", { className: "evalrep-section-label" }, "per-dimension mean"), dimKeys.map((k) => /* @__PURE__ */ React8.createElement(
+    Meter,
+    {
+      key: k,
+      label: k,
+      value: perDim[k]?.mean_normalized,
+      tone: "accent",
+      title: `${k}: ${pct(perDim[k]?.mean_normalized)}`
+    }
+  ))), /* @__PURE__ */ React8.createElement("div", { className: "evalrep-cases" }, /* @__PURE__ */ React8.createElement("div", { className: "evalrep-section-label" }, "cases"), /* @__PURE__ */ React8.createElement("div", { className: "evalrep-table-wrap" }, /* @__PURE__ */ React8.createElement("table", { className: "evalrep-table" }, /* @__PURE__ */ React8.createElement("thead", null, /* @__PURE__ */ React8.createElement("tr", null, /* @__PURE__ */ React8.createElement("th", { "aria-label": "expand" }), /* @__PURE__ */ React8.createElement("th", null, "case"), dimKeys.map((k) => /* @__PURE__ */ React8.createElement("th", { key: k, className: "evalrep-th-dim" }, k)), /* @__PURE__ */ React8.createElement("th", null, "score"), /* @__PURE__ */ React8.createElement("th", null, "state"))), /* @__PURE__ */ React8.createElement("tbody", null, (results.cases || []).map((c, i) => /* @__PURE__ */ React8.createElement(
+    CaseRow,
+    {
+      key: c.case_id || i,
+      c,
+      dimKeys,
+      open: expanded.has(i),
+      onToggle: () => toggle(i)
+    }
+  )))))));
+}
+
+// ui/EvalReportView.jsx
+import React9, { useState as useState3, useEffect as useEffect2, useRef as useRef2, useCallback } from "react";
+var TERMINAL2 = /* @__PURE__ */ new Set(["passed", "failed", "error"]);
+var POLL_MS = 2500;
+async function loadFromMindRoute2(reportPath) {
+  const r = await fetch("/api/mind/file?path=" + encodeURIComponent(reportPath), { credentials: "same-origin" });
+  if (!r.ok) throw new Error(String(r.status));
+  const payload = await r.json();
+  return JSON.parse(payload.content);
+}
+function normalize(doc) {
+  if (!doc || typeof doc !== "object") throw new Error("bad doc");
+  const results = doc.results != null ? doc.results : doc.aggregate || doc.cases ? doc : null;
+  const status = doc.status || (results && results.error ? "error" : null) || (results && results.aggregate ? results.aggregate.pass ? "passed" : "failed" : "pending");
+  return { status, results, history: doc.history };
+}
+function EvalReportView({ reportPath, fallback, load = loadFromMindRoute2, history }) {
+  const [state, setState] = useState3(null);
+  const [unavailable, setUnavailable] = useState3(false);
+  const timer = useRef2(null);
+  const clearTimer = () => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+  };
+  const fetchOnce = useCallback(async (cancelledRef) => {
+    try {
+      const doc = await Promise.resolve(load(reportPath));
+      const norm = normalize(doc);
+      if (cancelledRef.cancelled) return;
+      setState(norm);
+      if (!TERMINAL2.has(norm.status)) {
+        clearTimer();
+        timer.current = setTimeout(() => fetchOnce(cancelledRef), POLL_MS);
+      }
+    } catch {
+      if (!cancelledRef.cancelled) setUnavailable(true);
+    }
+  }, [load, reportPath]);
+  useEffect2(() => {
+    const cancelledRef = { cancelled: false };
+    setState(null);
+    setUnavailable(false);
+    fetchOnce(cancelledRef);
+    return () => {
+      cancelledRef.cancelled = true;
+      clearTimer();
+    };
+  }, [fetchOnce]);
+  if (unavailable) return fallback;
+  if (!state) {
+    return /* @__PURE__ */ React9.createElement("div", { className: "evalrep" }, /* @__PURE__ */ React9.createElement("div", { className: "evalrep-progress evalrep-progress-pending" }, /* @__PURE__ */ React9.createElement("span", { className: "evalrep-spinner", "aria-hidden": "true" }), /* @__PURE__ */ React9.createElement("span", { className: "evalrep-progress-label" }, "loading eval\u2026")));
+  }
+  return /* @__PURE__ */ React9.createElement(
+    EvalResultsView,
+    {
+      results: state.results,
+      status: state.status,
+      history: history || state.history
+    }
+  );
+}
 export {
   Combobox,
   ComputerMark,
@@ -1103,6 +1322,8 @@ export {
   Glyph as DysonGlyph,
   DysonMark,
   EmptyState,
+  EvalReportView,
+  EvalResultsView,
   MARK_VARIANTS,
   MARK_VARIANT_LABELS,
   MARK_VARIANT_NAMES,
