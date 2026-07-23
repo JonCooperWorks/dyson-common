@@ -179,6 +179,8 @@ export function SecurityReportView({ reportPath, fallback, load = loadFromMindRo
           <span className="secrep-spacer"/>
           <button className="secrep-btn secrep-toggle" data-on={view === 'cards'}
                   onClick={() => setView('cards')}>rendered</button>
+          <button className="secrep-btn secrep-toggle" data-on={view === 'report'}
+                  onClick={() => setView('report')}>report</button>
           <button className="secrep-btn secrep-toggle" data-on={view === 'json'}
                   onClick={() => setView('json')}>json</button>
         </div>
@@ -187,6 +189,12 @@ export function SecurityReportView({ reportPath, fallback, load = loadFromMindRo
           <div className="secrep-json-wrap">
             <pre className="secrep-json">{JSON.stringify(doc, null, 2)}</pre>
           </div>
+        ) : view === 'report' ? (
+          // The full written report — the artefact's markdown body, the
+          // same node the fetch-failure fallback renders.  Lets the reader
+          // see the narrative + evidence even when the structured findings
+          // list is empty (e.g. a pentest that confirmed no findings).
+          <div className="secrep-report">{fallback}</div>
         ) : (
           <>
             {visible.length === 0 && (

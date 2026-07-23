@@ -156,6 +156,19 @@ describe('SecurityReportView — cards', () => {
     expect(container.querySelector('.secrep-card')).toBeTruthy();
   });
 
+  it('report toggle shows the markdown narrative (fallback) inline', async () => {
+    const { container, getByText, getByTestId, queryByTestId } = await renderView();
+    // Not shown while the structured findings render...
+    expect(queryByTestId('md-fallback')).toBeNull();
+    fireEvent.click(getByText('report'));
+    // ...but the report view surfaces the same body the fetch-failure
+    // fallback would, so the narrative stays reachable even with 0 findings.
+    expect(getByTestId('md-fallback')).toBeTruthy();
+    expect(container.querySelector('.secrep-report')).toBeTruthy();
+    fireEvent.click(getByText('rendered'));
+    expect(queryByTestId('md-fallback')).toBeNull();
+  });
+
   it('copies the whole report as pretty JSON from rendered mode', async () => {
     const writeText = mockClipboard();
     const { getByRole } = await renderView();

@@ -1061,11 +1061,25 @@ function SecurityReportView({ reportPath, fallback, load = loadFromMindRoute }) 
     "button",
     {
       className: "secrep-btn secrep-toggle",
+      "data-on": view === "report",
+      onClick: () => setView("report")
+    },
+    "report"
+  ), /* @__PURE__ */ React7.createElement(
+    "button",
+    {
+      className: "secrep-btn secrep-toggle",
       "data-on": view === "json",
       onClick: () => setView("json")
     },
     "json"
-  )), view === "json" ? /* @__PURE__ */ React7.createElement("div", { className: "secrep-json-wrap" }, /* @__PURE__ */ React7.createElement("pre", { className: "secrep-json" }, JSON.stringify(doc, null, 2))) : /* @__PURE__ */ React7.createElement(React7.Fragment, null, visible.length === 0 && /* @__PURE__ */ React7.createElement("div", { className: "secrep-empty" }, doc.findings.length === 0 ? "No confirmed findings." : "No findings match."), groups.map(({ sev, items }) => /* @__PURE__ */ React7.createElement("div", { key: sev, className: "secrep-group" }, /* @__PURE__ */ React7.createElement("div", { className: "secrep-eyebrow" }, /* @__PURE__ */ React7.createElement("span", { className: "secrep-dot", style: { background: SEVERITY_COLOR[sev] } }), sev, " \xB7 ", items.length), items.map(({ f, idx }) => /* @__PURE__ */ React7.createElement(
+  )), view === "json" ? /* @__PURE__ */ React7.createElement("div", { className: "secrep-json-wrap" }, /* @__PURE__ */ React7.createElement("pre", { className: "secrep-json" }, JSON.stringify(doc, null, 2))) : view === "report" ? (
+    // The full written report — the artefact's markdown body, the
+    // same node the fetch-failure fallback renders.  Lets the reader
+    // see the narrative + evidence even when the structured findings
+    // list is empty (e.g. a pentest that confirmed no findings).
+    /* @__PURE__ */ React7.createElement("div", { className: "secrep-report" }, fallback)
+  ) : /* @__PURE__ */ React7.createElement(React7.Fragment, null, visible.length === 0 && /* @__PURE__ */ React7.createElement("div", { className: "secrep-empty" }, doc.findings.length === 0 ? "No confirmed findings." : "No findings match."), groups.map(({ sev, items }) => /* @__PURE__ */ React7.createElement("div", { key: sev, className: "secrep-group" }, /* @__PURE__ */ React7.createElement("div", { className: "secrep-eyebrow" }, /* @__PURE__ */ React7.createElement("span", { className: "secrep-dot", style: { background: SEVERITY_COLOR[sev] } }), sev, " \xB7 ", items.length), items.map(({ f, idx }) => /* @__PURE__ */ React7.createElement(
     FindingCard,
     {
       key: idx,

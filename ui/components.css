@@ -324,6 +324,11 @@
   color: var(--fg-muted);
 }
 .secrep-empty { color: var(--fg-faint); font-size: 12.5px; padding: 14px 2px; }
+/* The "report" view embeds the artefact's markdown body (the consumer's
+ * fallback node).  `.secrep` already scrolls + pads, so drop the body's
+ * own frame padding to avoid a double gutter. */
+.secrep-report { margin-top: 6px; }
+.secrep-report .prose { padding: 0 !important; overflow: visible !important; }
 
 /* ── Eval results (EvalResultsView / EvalReportView) ───────────────────────
  * Self-contained: only .evalrep-* + design tokens, so the operator's Evals run
