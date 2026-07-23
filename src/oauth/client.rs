@@ -165,9 +165,34 @@ pub fn protected_resource_metadata_urls(server_url: &str) -> Result<Vec<String>,
     Ok(urls)
 }
 
+/// The RFC 8707 resource indicator for an MCP server URL: its origin
+/// (`scheme://host[:port]`), with any path/query stripped. This is the
+/// canonical resource identifier an MCP authorization server binds tokens to,
+/// and matches what the resource advertises in its RFC 9728 protected-resource
+/// metadata `resource` field. Callers pass the result to [`build_auth_url`] /
+/// [`exchange_code`] so the AS can scope the token to this resource.
+pub fn canonical_resource(server_url: &str) -> Result<String, OAuthError> {
+    let parsed = reqwest::Url::parse(server_url).map_err(|e| OAuthError::BadUrl {
+        url: server_url.to_string(),
+        detail: e.to_string(),
+    })?;
+    let host = parsed.host_str().ok_or_else(|| OAuthError::BadUrl {
+        url: server_url.to_string(),
+        detail: "no host".into(),
+    })?;
+    Ok(match parsed.port() {
+        Some(p) => format!("{}://{host}:{p}", parsed.scheme()),
+        None => format!("{}://{host}", parsed.scheme()),
+    })
+}
+
 /// Build the `/authorize` redirect URL with PKCE + state. Scopes are
 /// space-joined; an empty slice omits the `scope` param entirely (some ASes
-/// reject `scope=` / scopes not in the DCR record).
+/// reject `scope=` / scopes not in the DCR record). When `resource` is set it
+/// is appended as the RFC 8707 resource indicator — required by MCP ASes that
+/// bind tokens to a specific resource (e.g. this fleet's own exposure AS,
+/// which rejects the authorize request with `invalid_target` without it);
+/// unrecognizing ASes MUST ignore it (RFC 6749 §3.1), so passing it is safe.
 pub fn build_auth_url(
     authorization_endpoint: &str,
     client_id: &str,
@@ -175,6 +200,7 @@ pub fn build_auth_url(
     redirect_uri: &str,
     code_challenge: &str,
     state: &str,
+    resource: Option<&str>,
 ) -> Result<String, OAuthError> {
     let mut url = reqwest::Url::parse(authorization_endpoint).map_err(|e| OAuthError::BadUrl {
         url: authorization_endpoint.to_string(),
@@ -190,6 +216,9 @@ pub fn build_auth_url(
             .append_pair("state", state);
         if !scopes.is_empty() {
             q.append_pair("scope", &scopes.join(" "));
+        }
+        if let Some(resource) = resource {
+            q.append_pair("resource", resource);
         }
     }
     Ok(url.to_string())
@@ -357,7 +386,10 @@ async fn post_token(
     response_json_capped(resp, token_url).await
 }
 
-/// Exchange an authorization code for tokens (RFC 6749 §4.1.3).
+/// Exchange an authorization code for tokens (RFC 6749 §4.1.3). When
+/// `resource` is set it is echoed as the RFC 8707 resource indicator, as
+/// required by ASes that bound the authorization code to a resource — it must
+/// match the value sent to [`build_auth_url`].
 #[allow(clippy::too_many_arguments)]
 pub async fn exchange_code(
     token_url: &str,
@@ -366,6 +398,7 @@ pub async fn exchange_code(
     client_id: &str,
     client_secret: Option<&str>,
     redirect_uri: &str,
+    resource: Option<&str>,
     client: &reqwest::Client,
 ) -> Result<TokenResponse, OAuthError> {
     let mut params = vec![
@@ -377,6 +410,9 @@ pub async fn exchange_code(
     ];
     if let Some(secret) = client_secret {
         params.push(("client_secret", secret));
+    }
+    if let Some(resource) = resource {
+        params.push(("resource", resource));
     }
     post_token(token_url, &params, client).await
 }
@@ -462,6 +498,7 @@ mod tests {
             "http://localhost/cb",
             &pkce.challenge,
             "st",
+            None,
         )
         .unwrap();
         assert!(with.contains("scope=openid+mcp") || with.contains("scope=openid%20mcp"));
@@ -474,9 +511,62 @@ mod tests {
             "http://localhost/cb",
             "chal",
             "st",
+            None,
         )
         .unwrap();
         assert!(!without.contains("scope="));
+    }
+
+    #[test]
+    fn build_auth_url_appends_rfc8707_resource_when_set() {
+        // Regression: MCP ASes that bind tokens to a resource (this fleet's own
+        // exposure AS) reject `/authorize` with `invalid_target` unless the
+        // resource indicator is present. When set it must be sent; when None it
+        // must be absent (unchanged behavior for ASes that don't use it).
+        let with = build_auth_url(
+            "https://swarm.example/authorize",
+            "cid",
+            &["mcp".to_string()],
+            "http://localhost/cb",
+            "chal",
+            "st",
+            Some("https://mcp-abc.swarm.example"),
+        )
+        .unwrap();
+        assert!(
+            with.contains("resource=https%3A%2F%2Fmcp-abc.swarm.example"),
+            "authorize URL must carry the encoded resource indicator: {with}"
+        );
+
+        let without = build_auth_url(
+            "https://swarm.example/authorize",
+            "cid",
+            &["mcp".to_string()],
+            "http://localhost/cb",
+            "chal",
+            "st",
+            None,
+        )
+        .unwrap();
+        assert!(!without.contains("resource="));
+    }
+
+    #[test]
+    fn canonical_resource_is_origin_only() {
+        // Matches the RFC 9728 protected-resource metadata `resource` value:
+        // origin with the /mcp path (and any query) stripped.
+        assert_eq!(
+            canonical_resource("https://mcp-abc.swarm.example/mcp").unwrap(),
+            "https://mcp-abc.swarm.example"
+        );
+        assert_eq!(
+            canonical_resource("http://127.0.0.1:8080/mcp/sse?x=1").unwrap(),
+            "http://127.0.0.1:8080"
+        );
+        assert!(matches!(
+            canonical_resource("not a url"),
+            Err(OAuthError::BadUrl { .. })
+        ));
     }
 
     #[test]
