@@ -45,6 +45,264 @@
   color: var(--fg);
 }
 
+/* ── <SubscriptionConnectModal> ──────────────────────────────── */
+.modal-scrim.subscription-connect-scrim {
+  padding: 20px;
+  background: color-mix(in srgb, #080a10 88%, transparent);
+  backdrop-filter: blur(10px) saturate(0.8);
+}
+.modal.subscription-connect {
+  width: min(620px, 96vw);
+  max-height: min(760px, 92vh);
+  overflow: auto;
+  border: 1px solid var(--line-2, var(--border));
+  border-radius: 10px;
+  color: var(--fg);
+  background: var(--bg-1);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset,
+              0 30px 80px -18px rgba(0, 0, 0, 0.85),
+              0 0 0 1px rgba(0, 0, 0, 0.35);
+  --subscription-tone: var(--accent);
+  --subscription-tone-wash: color-mix(in srgb, var(--accent) 8%, var(--bg-2));
+}
+.modal.subscription-connect-claude {
+  --subscription-tone: var(--sub, #d97757);
+  --subscription-tone-wash: color-mix(in srgb, var(--sub, #d97757) 8%, var(--bg-2));
+}
+.subscription-connect-head {
+  height: 54px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line, var(--border));
+  background: var(--panel, var(--bg-2));
+}
+.subscription-connect-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--mute-2, var(--fg-muted));
+  font: 600 10px/1 var(--font-mono, var(--mono));
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.subscription-backend-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--subscription-tone) 48%, transparent);
+  border-radius: 5px;
+  color: var(--subscription-tone);
+  background: var(--subscription-tone-wash);
+  font: 700 9px/1 var(--font-mono, var(--mono));
+  letter-spacing: 0.07em;
+}
+.subscription-backend-mark {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 auto;
+  background: var(--subscription-tone);
+  box-shadow: 0 0 7px -1px var(--subscription-tone);
+}
+.subscription-connect-close {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--mute, var(--fg-muted));
+  background: transparent;
+  font: 400 20px/1 var(--font-ui, var(--sans));
+  cursor: pointer;
+}
+.subscription-connect-close:hover {
+  color: var(--fg);
+  border-color: var(--line, var(--border));
+  background: var(--panel-2, var(--bg-2));
+}
+.subscription-connect-body { padding: 36px 38px 40px; }
+.subscription-connect-kicker {
+  margin-bottom: 9px;
+  color: var(--subscription-tone);
+  font: 700 10px/1 var(--font-mono, var(--mono));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.subscription-connect-body h2 {
+  margin: 0;
+  color: var(--fg);
+  font: 650 28px/1.15 var(--font-ui, var(--sans));
+  letter-spacing: -0.025em;
+}
+.subscription-connect-lede {
+  margin: 10px 0 22px;
+  max-width: 470px;
+  color: var(--mute-2, var(--fg-muted));
+  font: 400 14px/1.55 var(--font-ui, var(--sans));
+}
+.subscription-privacy {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-bottom: 25px;
+  padding: 13px 14px;
+  border: 1px solid var(--line, var(--border));
+  border-radius: 6px;
+  background: var(--panel, var(--bg-2));
+}
+.subscription-privacy-mark {
+  width: 19px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--subscription-tone) 45%, transparent);
+  border-radius: 4px;
+  color: var(--subscription-tone);
+  background: var(--subscription-tone-wash);
+  font-size: 11px;
+  font-weight: 750;
+}
+.subscription-privacy strong,
+.subscription-privacy span { display: block; }
+.subscription-privacy strong { color: var(--fg-dim, var(--fg)); font-size: 12.5px; }
+.subscription-privacy div > span {
+  margin-top: 3px;
+  color: var(--mute, var(--fg-muted));
+  font-size: 11.5px;
+}
+.subscription-connect-flow {
+  overflow: hidden;
+  border: 1px solid var(--line, var(--border));
+  border-radius: 7px;
+  background: var(--panel, var(--bg-2));
+}
+.subscription-step {
+  min-height: 78px;
+  padding: 14px 15px;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+.subscription-step + .subscription-step { border-top: 1px solid var(--line, var(--border)); }
+.subscription-step-number {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-2, var(--border));
+  border-radius: 4px;
+  color: var(--fg-dim, var(--fg));
+  background: var(--bg-1);
+  font: 700 10px/1 var(--font-mono, var(--mono));
+}
+.subscription-step strong,
+.subscription-step div > span,
+.subscription-step label > span { display: block; }
+.subscription-step strong { color: var(--fg); font-size: 12.5px; }
+.subscription-step div > span,
+.subscription-step label > span {
+  margin-top: 4px;
+  color: var(--mute, var(--fg-muted));
+  font-size: 11px;
+}
+.subscription-connect-action {
+  min-height: 34px;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--subscription-tone);
+  border-radius: var(--radius);
+  font: 600 12px/1 var(--font-ui, var(--sans));
+  text-decoration: none;
+  cursor: pointer;
+}
+.subscription-connect-primary {
+  color: var(--accent-fg);
+  background: var(--subscription-tone);
+}
+.subscription-connect-action:disabled { cursor: not-allowed; opacity: 0.55; }
+.subscription-device-code {
+  min-width: 174px;
+  height: 42px;
+  padding: 0 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid color-mix(in srgb, var(--subscription-tone) 45%, transparent);
+  border-radius: 5px;
+  color: var(--fg);
+  background: var(--bg-1);
+  cursor: pointer;
+}
+.subscription-code-value {
+  font: 600 14px/1 var(--font-mono, var(--mono));
+  letter-spacing: 0.1em;
+}
+.subscription-device-code > span:last-child {
+  color: var(--subscription-tone);
+  font: 700 9px/1 var(--font-mono, var(--mono));
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.subscription-code-step label { min-width: 0; }
+.subscription-code-step input {
+  width: 100%;
+  height: 36px;
+  margin-top: 10px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2, var(--border));
+  border-radius: 4px;
+  color: var(--fg);
+  background: var(--bg-1);
+  font: 500 11px/1 var(--font-mono, var(--mono));
+}
+.subscription-starting {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 18px;
+  border: 1px solid var(--line, var(--border));
+  border-radius: 6px;
+  color: var(--mute-2, var(--fg-muted));
+  background: var(--panel, var(--bg-2));
+  font-size: 12px;
+}
+.subscription-starting > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--subscription-tone);
+  box-shadow: 0 0 12px var(--subscription-tone);
+  animation: subscription-connect-pulse 1.2s ease-in-out infinite;
+}
+.subscription-connect-error {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  border-radius: var(--radius);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  font-size: 12px;
+}
+@keyframes subscription-connect-pulse {
+  0%, 100% { opacity: 0.45; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
+}
+@media (max-width: 620px) {
+  .subscription-connect-body { padding: 27px 20px 28px; }
+  .subscription-step { grid-template-columns: 26px minmax(0, 1fr); }
+  .subscription-step > :last-child { grid-column: 2; justify-self: start; }
+  .subscription-device-code { min-width: min(220px, 100%); }
+}
+
 /* ── <EmptyState> ─────────────────────────────────────────────── */
 .ui-empty {
   display: flex;

@@ -1327,6 +1327,116 @@ function EvalReportView({ reportPath, fallback, load = loadFromMindRoute2, histo
     }
   );
 }
+
+// ui/SubscriptionConnectModal.jsx
+import React10 from "react";
+var SUBSCRIPTION_CONNECT_PROVIDERS = Object.freeze({
+  codex: Object.freeze({
+    id: "codex",
+    badge: "Codex",
+    service: "ChatGPT",
+    tone: "codex",
+    flow: "device"
+  }),
+  claude: Object.freeze({
+    id: "claude",
+    badge: "Claude",
+    service: "Claude",
+    tone: "claude",
+    flow: "code"
+  })
+});
+function SubscriptionConnectModal({
+  initial,
+  subscription,
+  getStatus,
+  completeAuth,
+  onConnected,
+  onClose,
+  subjectLabel = "this agent"
+}) {
+  const [auth, setAuth] = React10.useState(initial || {});
+  const [copied, setCopied] = React10.useState(false);
+  const [code, setCode] = React10.useState("");
+  const [submitting, setSubmitting] = React10.useState(false);
+  const getStatusRef = React10.useRef(getStatus);
+  const completeAuthRef = React10.useRef(completeAuth);
+  const onConnectedRef = React10.useRef(onConnected);
+  getStatusRef.current = getStatus;
+  completeAuthRef.current = completeAuth;
+  onConnectedRef.current = onConnected;
+  React10.useEffect(() => {
+    let alive = true;
+    let completed = false;
+    const poll = async () => {
+      try {
+        const next = await getStatusRef.current?.();
+        if (!alive || !next) return;
+        setAuth(next);
+        if (next.connected && !completed) {
+          completed = true;
+          try {
+            await onConnectedRef.current?.();
+          } catch {
+            completed = false;
+            if (alive) setAuth({ ...next, error: "Connected, but setup did not finish. Retrying\u2026" });
+          }
+        }
+      } catch {
+      }
+    };
+    const timer = setInterval(poll, 1e3);
+    poll();
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [subscription.id]);
+  const copyCode = async () => {
+    if (!auth.user_code || !navigator.clipboard?.writeText) return;
+    await navigator.clipboard.writeText(auth.user_code);
+    setCopied(true);
+  };
+  const complete = async (event) => {
+    event.preventDefault();
+    if (!code.trim() || typeof completeAuthRef.current !== "function") return;
+    setSubmitting(true);
+    try {
+      const next = await completeAuthRef.current(code.trim());
+      setAuth(next || {});
+      if (next?.connected) await onConnectedRef.current?.();
+    } catch {
+      setAuth((previous) => ({
+        ...previous,
+        error: "That authorization code could not be accepted. Check the full code and try again."
+      }));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  const signInUrl = auth.auth_url || auth.verification_uri;
+  const isFailed = auth.state === "failed" || auth.state === "unavailable";
+  return /* @__PURE__ */ React10.createElement(
+    Modal,
+    {
+      className: `modal subscription-connect subscription-connect-${subscription.tone}`,
+      scrimClassName: "modal-scrim subscription-connect-scrim",
+      label: `Connect ${subscription.service} subscription`,
+      onClose
+    },
+    /* @__PURE__ */ React10.createElement("div", { className: "subscription-connect-head" }, /* @__PURE__ */ React10.createElement("div", { className: "subscription-connect-brand" }, /* @__PURE__ */ React10.createElement("span", { className: `subscription-backend-badge subscription-backend-badge-${subscription.tone}` }, /* @__PURE__ */ React10.createElement("span", { className: "subscription-backend-mark", "aria-hidden": "true" }), subscription.badge), /* @__PURE__ */ React10.createElement("span", null, "Subscription access")), /* @__PURE__ */ React10.createElement("button", { type: "button", className: "subscription-connect-close", onClick: onClose, "aria-label": "Close" }, "\xD7")),
+    /* @__PURE__ */ React10.createElement("div", { className: "subscription-connect-body" }, /* @__PURE__ */ React10.createElement("div", { className: "subscription-connect-kicker" }, "Native provider"), /* @__PURE__ */ React10.createElement("h2", null, "Connect ", subscription.service), /* @__PURE__ */ React10.createElement("p", { className: "subscription-connect-lede" }, "Sign in once, then use your ", subscription.service, " plan directly from ", subjectLabel, "."), /* @__PURE__ */ React10.createElement("div", { className: "subscription-privacy" }, /* @__PURE__ */ React10.createElement("span", { className: "subscription-privacy-mark", "aria-hidden": "true" }, "\u2713"), /* @__PURE__ */ React10.createElement("div", null, /* @__PURE__ */ React10.createElement("strong", null, "Credentials stay in Swarm."), /* @__PURE__ */ React10.createElement("span", null, subjectLabel, " receives only an instance-bound proxy token."))), signInUrl ? /* @__PURE__ */ React10.createElement("div", { className: "subscription-connect-flow" }, /* @__PURE__ */ React10.createElement("div", { className: "subscription-step" }, /* @__PURE__ */ React10.createElement("span", { className: "subscription-step-number" }, "1"), /* @__PURE__ */ React10.createElement("div", null, /* @__PURE__ */ React10.createElement("strong", null, "Open ", subscription.service), /* @__PURE__ */ React10.createElement("span", null, "Approve access in a secure provider window.")), /* @__PURE__ */ React10.createElement("a", { className: "subscription-connect-action subscription-connect-primary", href: signInUrl, target: "_blank", rel: "noreferrer" }, "Open sign-in ", /* @__PURE__ */ React10.createElement("span", { "aria-hidden": "true" }, "\u2197"))), subscription.flow === "device" && auth.user_code ? /* @__PURE__ */ React10.createElement("div", { className: "subscription-step" }, /* @__PURE__ */ React10.createElement("span", { className: "subscription-step-number" }, "2"), /* @__PURE__ */ React10.createElement("div", null, /* @__PURE__ */ React10.createElement("strong", null, "Enter this code"), /* @__PURE__ */ React10.createElement("span", null, "The window will ask for it.")), /* @__PURE__ */ React10.createElement("button", { type: "button", className: "subscription-device-code", onClick: copyCode, "aria-label": "Copy device code" }, /* @__PURE__ */ React10.createElement("span", { className: "subscription-code-value" }, auth.user_code), /* @__PURE__ */ React10.createElement("span", null, copied ? "Copied" : "Copy"))) : null, subscription.flow === "code" ? /* @__PURE__ */ React10.createElement("form", { className: "subscription-step subscription-code-step", onSubmit: complete }, /* @__PURE__ */ React10.createElement("span", { className: "subscription-step-number" }, "2"), /* @__PURE__ */ React10.createElement("label", null, /* @__PURE__ */ React10.createElement("strong", null, "Paste the returned code"), /* @__PURE__ */ React10.createElement("span", null, "Copy the complete code from Claude after approval."), /* @__PURE__ */ React10.createElement(
+      "input",
+      {
+        value: code,
+        onChange: (event) => setCode(event.target.value),
+        autoComplete: "off",
+        spellCheck: "false",
+        placeholder: "Authorization code"
+      }
+    )), /* @__PURE__ */ React10.createElement("button", { type: "submit", className: "subscription-connect-action subscription-connect-primary", disabled: !code.trim() || submitting }, submitting ? "Connecting\u2026" : "Connect")) : null) : isFailed ? /* @__PURE__ */ React10.createElement("p", { className: "subscription-connect-error" }, auth.error || `${subscription.service} sign-in could not start.`) : /* @__PURE__ */ React10.createElement("div", { className: "subscription-starting" }, /* @__PURE__ */ React10.createElement("span", null), "Preparing secure sign-in\u2026"), auth.error && !isFailed ? /* @__PURE__ */ React10.createElement("p", { className: "subscription-connect-error" }, auth.error) : null)
+  );
+}
 export {
   Combobox,
   ComputerMark,
@@ -1342,7 +1452,9 @@ export {
   MARK_VARIANT_LABELS,
   MARK_VARIANT_NAMES,
   Modal,
+  SUBSCRIPTION_CONNECT_PROVIDERS,
   SecurityReportView,
+  SubscriptionConnectModal,
   MODES as THEME_MODES,
   base64url,
   copyToClipboard,
