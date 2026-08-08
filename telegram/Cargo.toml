@@ -1,0 +1,22 @@
+[package]
+name = "dyson-telegram"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Shared Telegram update, media policy, and bounded file transport for Dyson runtimes."
+repository = "https://github.com/JonCooperWorks/dyson-common"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+futures-util = { version = "0.3", optional = true, default-features = false, features = ["std"] }
+reqwest = { version = "0.13", optional = true, default-features = false, features = ["json", "stream", "rustls"] }
+
+[features]
+default = []
+file-api = ["dep:futures-util", "dep:reqwest"]
+
+[dev-dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }

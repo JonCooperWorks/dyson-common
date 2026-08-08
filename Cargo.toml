@@ -1,12 +1,13 @@
 [package]
 name = "dyson-common"
-version = "0.1.9"
+version = "0.1.10"
 edition = "2024"
 license = "MIT"
 description = "Shared wire contracts and primitives for dyson and dyson-swarm (tokens, OAuth/MCP-auth, cost, feedback, skill-marketplace)."
 repository = "https://github.com/JonCooperWorks/dyson-common"
 
 [dependencies]
+dyson-telegram = { path = "telegram", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -30,3 +31,7 @@ jsonwebtoken = { version = "10.4", optional = true, default-features = false, fe
 default = []
 oauth-client = ["dep:reqwest", "dep:base64", "dep:rand", "dep:sha2"]
 oidc = ["dep:jsonwebtoken"]
+
+[workspace]
+members = ["telegram"]
+resolver = "2"
