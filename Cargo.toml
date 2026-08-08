@@ -1,6 +1,6 @@
 [package]
 name = "dyson-common"
-version = "0.1.7"
+version = "0.1.9"
 edition = "2024"
 license = "MIT"
 description = "Shared wire contracts and primitives for dyson and dyson-swarm (tokens, OAuth/MCP-auth, cost, feedback, skill-marketplace)."

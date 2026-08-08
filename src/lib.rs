@@ -27,6 +27,8 @@
 //! - [`ui`] — shared design-token CSS and theme helpers for Rust-rendered pages.
 //! - [`util`] — constant-time compare, env parsing, backoff term.
 //! - [`date`] — civil-date arithmetic (both directions).
+//! - [`telegram_media`] — shared Telegram attachment limits and document
+//!   classification used by managed Dyson and BYO-agent channels.
 
 pub mod auth;
 pub mod contracts;
@@ -40,6 +42,7 @@ pub mod oauth;
 #[cfg(feature = "oidc")]
 pub mod oidc;
 pub mod state_sync;
+pub mod telegram_media;
 pub mod tokens;
 pub mod ui;
 pub mod util;
