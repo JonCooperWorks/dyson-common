@@ -92,8 +92,7 @@ fn should_sync_workspace_path(rel: &Path) -> bool {
         })
         .collect();
     match parts.as_slice() {
-        [file] => has_extension(file, "md"),
-        ["memory", .., file] => has_extension(file, "md"),
+        [file] | ["memory", .., file] => has_extension(file, "md"),
         ["kb", ..] | [STATE_SKILLS_DIR, ..] => true,
         ["channels", _channel, rest @ ..] => should_sync_channel_workspace(rest),
         _ => false,

@@ -115,23 +115,27 @@ pub fn generate_state() -> String {
     random_b64_32()
 }
 
+fn origin_and_path(url: &str) -> Result<(String, String), OAuthError> {
+    let parsed = reqwest::Url::parse(url).map_err(|e| OAuthError::BadUrl {
+        url: url.to_string(),
+        detail: e.to_string(),
+    })?;
+    let host = parsed.host_str().ok_or_else(|| OAuthError::BadUrl {
+        url: url.to_string(),
+        detail: "no host".into(),
+    })?;
+    let origin = match parsed.port() {
+        Some(port) => format!("{}://{host}:{port}", parsed.scheme()),
+        None => format!("{}://{host}", parsed.scheme()),
+    };
+    Ok((origin, parsed.path().trim_end_matches('/').to_string()))
+}
+
 /// RFC 8414 §3.1 authorization-server metadata URL. When the AS URL has a
 /// non-trivial path, the well-known segment is inserted *between* origin and
 /// path (multi-tenant providers); otherwise it sits at the root.
 pub fn as_metadata_url(as_url: &str) -> Result<String, OAuthError> {
-    let parsed = reqwest::Url::parse(as_url).map_err(|e| OAuthError::BadUrl {
-        url: as_url.to_string(),
-        detail: e.to_string(),
-    })?;
-    let host = parsed.host_str().ok_or_else(|| OAuthError::BadUrl {
-        url: as_url.to_string(),
-        detail: "no host".into(),
-    })?;
-    let origin = match parsed.port() {
-        Some(p) => format!("{}://{host}:{p}", parsed.scheme()),
-        None => format!("{}://{host}", parsed.scheme()),
-    };
-    let path = parsed.path().trim_end_matches('/');
+    let (origin, path) = origin_and_path(as_url)?;
     Ok(if path.is_empty() {
         format!("{origin}/.well-known/oauth-authorization-server")
     } else {
@@ -142,19 +146,7 @@ pub fn as_metadata_url(as_url: &str) -> Result<String, OAuthError> {
 /// RFC 9728 protected-resource metadata URLs to try, in order: the path-scoped
 /// form (when the resource has a path) then the origin-root form.
 pub fn protected_resource_metadata_urls(server_url: &str) -> Result<Vec<String>, OAuthError> {
-    let parsed = reqwest::Url::parse(server_url).map_err(|e| OAuthError::BadUrl {
-        url: server_url.to_string(),
-        detail: e.to_string(),
-    })?;
-    let host = parsed.host_str().ok_or_else(|| OAuthError::BadUrl {
-        url: server_url.to_string(),
-        detail: "no host".into(),
-    })?;
-    let origin = match parsed.port() {
-        Some(p) => format!("{}://{host}:{p}", parsed.scheme()),
-        None => format!("{}://{host}", parsed.scheme()),
-    };
-    let path = parsed.path().trim_end_matches('/');
+    let (origin, path) = origin_and_path(server_url)?;
     let mut urls = Vec::new();
     if !path.is_empty() {
         urls.push(format!(
@@ -172,18 +164,7 @@ pub fn protected_resource_metadata_urls(server_url: &str) -> Result<Vec<String>,
 /// metadata `resource` field. Callers pass the result to [`build_auth_url`] /
 /// [`exchange_code`] so the AS can scope the token to this resource.
 pub fn canonical_resource(server_url: &str) -> Result<String, OAuthError> {
-    let parsed = reqwest::Url::parse(server_url).map_err(|e| OAuthError::BadUrl {
-        url: server_url.to_string(),
-        detail: e.to_string(),
-    })?;
-    let host = parsed.host_str().ok_or_else(|| OAuthError::BadUrl {
-        url: server_url.to_string(),
-        detail: "no host".into(),
-    })?;
-    Ok(match parsed.port() {
-        Some(p) => format!("{}://{host}:{p}", parsed.scheme()),
-        None => format!("{}://{host}", parsed.scheme()),
-    })
+    origin_and_path(server_url).map(|(origin, _)| origin)
 }
 
 /// Build the `/authorize` redirect URL with PKCE + state. Scopes are
