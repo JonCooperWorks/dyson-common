@@ -19,6 +19,30 @@ function pct(x) {
   return `${(x * 100).toFixed(1)}%`;
 }
 
+function elapsed(ms) {
+  if (ms == null || ms === '') return '—';
+  const value = Number(ms);
+  if (!Number.isFinite(value) || value < 0) return '—';
+  if (value < 1000) return `${Math.round(value)}ms`;
+  const seconds = value / 1000;
+  if (seconds < 60) return `${Number(seconds.toFixed(seconds < 10 ? 2 : 1))}s`;
+  const wholeSeconds = Math.round(seconds);
+  const minutes = Math.floor(wholeSeconds / 60);
+  const remainder = wholeSeconds % 60;
+  if (minutes < 60) return `${minutes}m ${remainder}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
+}
+
+function caseElapsedMs(c) {
+  if (c?.duration_ms != null) return Number(c.duration_ms);
+  const started = Number(c?.started_at);
+  const finished = Number(c?.finished_at);
+  return Number.isFinite(started) && Number.isFinite(finished)
+    ? Math.max(0, finished - started) * 1000
+    : null;
+}
+
 function statusTone(status) {
   if (status === 'passed') return 'ok';
   if (status === 'failed') return 'fail';
@@ -91,7 +115,7 @@ function TrendSparkline({ history, threshold }) {
   );
 }
 
-function CaseRow({ c, dimKeys, open, onToggle }) {
+function CaseRow({ c, dimKeys, open, onToggle, showTiming }) {
   const errored = !!c.error;
   const byKey = new Map((c.dimensions || []).map((d) => [d.key, d]));
   return (
@@ -119,6 +143,7 @@ function CaseRow({ c, dimKeys, open, onToggle }) {
           );
         })}
         <td className="evalrep-case-score">{errored ? <span className="evalrep-muted">—</span> : pct(c.case_score)}</td>
+        {showTiming ? <td className="evalrep-case-time">{elapsed(caseElapsedMs(c))}</td> : null}
         <td className="evalrep-case-state">
           {errored
             ? <span className="evalrep-chip evalrep-chip-error">error</span>
@@ -127,7 +152,7 @@ function CaseRow({ c, dimKeys, open, onToggle }) {
       </tr>
       {open && (
         <tr className="evalrep-case-detail-row">
-          <td colSpan={dimKeys.length + 4}>
+          <td colSpan={dimKeys.length + 4 + (showTiming ? 1 : 0)}>
             <div className="evalrep-case-detail">
               {errored && <div className="evalrep-error-note">{c.error}</div>}
               <DetailBlock label="input" value={c.input} />
@@ -166,7 +191,7 @@ function DetailBlock({ label, value, truncated }) {
   );
 }
 
-export function EvalResultsView({ results, status, history, title }) {
+export function EvalResultsView({ results, status, history, title, showTiming = true }) {
   const [expanded, setExpanded] = useState(() => new Set());
   const isTerminal = TERMINAL.has(status) || (results && (results.error || results.aggregate));
 
@@ -230,6 +255,7 @@ export function EvalResultsView({ results, status, history, title }) {
         </div>
         <div className="evalrep-verdict-meta">
           <span>{agg.cases_total} case{agg.cases_total === 1 ? '' : 's'}</span>
+          {showTiming && results.duration_ms != null ? <span>{elapsed(results.duration_ms)} total</span> : null}
           {agg.cases_errored > 0 ? <span className="evalrep-meta-error">{agg.cases_errored} errored</span> : null}
           {results.judge_model ? <span className="evalrep-mono">judge · {results.judge_model}</span> : null}
         </div>
@@ -259,13 +285,14 @@ export function EvalResultsView({ results, status, history, title }) {
                 <th>case</th>
                 {dimKeys.map((k) => <th key={k} className="evalrep-th-dim">{k}</th>)}
                 <th>score</th>
+                {showTiming ? <th>time</th> : null}
                 <th>state</th>
               </tr>
             </thead>
             <tbody>
               {(results.cases || []).map((c, i) => (
                 <CaseRow key={c.case_id || i} c={c} dimKeys={dimKeys}
-                         open={expanded.has(i)} onToggle={() => toggle(i)} />
+                         open={expanded.has(i)} onToggle={() => toggle(i)} showTiming={showTiming} />
               ))}
             </tbody>
           </table>

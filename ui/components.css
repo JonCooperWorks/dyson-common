@@ -705,6 +705,7 @@
 .evalrep-dimbar-fill { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
 .evalrep-dimcell-val { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--fg-muted); min-width: 40px; text-align: right; }
 .evalrep-case-score { font-weight: 650; font-variant-numeric: tabular-nums; }
+.evalrep-case-time { color: var(--fg-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .evalrep-chip {
   display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
   border: 1px solid var(--border); color: var(--fg-muted);

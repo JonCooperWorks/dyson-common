@@ -9,6 +9,7 @@ const passing = {
   version: 1,
   spec_digest: 'sha256:abc',
   judge_model: 'anthropic/claude-sonnet-5',
+  duration_ms: 12_345,
   cases: [
     {
       case_id: 'c1',
@@ -18,6 +19,7 @@ const passing = {
       error: null,
       input: 'in-1',
       reference: 'ref-1',
+      duration_ms: 1_234,
       dimensions: [
         { key: 'accuracy', rationale: 'looks right', score: 4, normalized: 0.8 },
         { key: 'tone', rationale: 'polite', score: 4, normalized: 0.8 },
@@ -42,6 +44,8 @@ describe('EvalResultsView', () => {
     expect(screen.getAllByText('80.0%').length).toBeGreaterThan(0);
     // Dimension labels appear (meter label + table header).
     expect(screen.getAllByText('accuracy').length).toBeGreaterThan(0);
+    expect(screen.getByText('12.3s total')).toBeTruthy();
+    expect(screen.getByText('1.23s')).toBeTruthy();
   });
 
   it('expands a case row to reveal input/candidate/rationale', () => {
@@ -50,6 +54,19 @@ describe('EvalResultsView', () => {
     expect(screen.getByText('in-1')).toBeTruthy();
     expect(screen.getByText('out-1')).toBeTruthy();
     expect(screen.getByText('looks right')).toBeTruthy();
+  });
+
+  it('can leave timing to a host-specific run view', () => {
+    render(<EvalResultsView results={passing} status="passed" showTiming={false} />);
+    expect(screen.queryByText('12.3s total')).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'time' })).toBeNull();
+  });
+
+  it('does not report missing historical timing as zero', () => {
+    const historical = structuredClone(passing);
+    delete historical.cases[0].duration_ms;
+    render(<EvalResultsView results={historical} status="passed" />);
+    expect(document.querySelector('.evalrep-case-time')?.textContent).toBe('—');
   });
 
   it('shows a running progress state before results arrive', () => {
