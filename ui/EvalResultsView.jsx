@@ -43,6 +43,16 @@ function caseElapsedMs(c) {
     : null;
 }
 
+function targetElapsedMs(target, cases) {
+  if (target?.duration_ms != null) return Number(target.duration_ms);
+  const key = target?.target?.key;
+  const durations = (cases || [])
+    .filter(c => c?.target?.key === key)
+    .map(caseElapsedMs)
+    .filter(value => Number.isFinite(value));
+  return durations.length ? durations.reduce((sum, value) => sum + value, 0) : null;
+}
+
 function statusTone(status) {
   if (status === 'passed') return 'ok';
   if (status === 'failed') return 'fail';
@@ -115,7 +125,7 @@ function TrendSparkline({ history, threshold }) {
   );
 }
 
-function CaseRow({ c, dimKeys, open, onToggle, showTiming }) {
+function CaseRow({ c, dimKeys, open, onToggle, showTiming, showTarget }) {
   const errored = !!c.error;
   const byKey = new Map((c.dimensions || []).map((d) => [d.key, d]));
   return (
@@ -127,6 +137,7 @@ function CaseRow({ c, dimKeys, open, onToggle, showTiming }) {
           </span>
         </td>
         <td className="evalrep-case-id" title={c.case_id}>{c.case_id}</td>
+        {showTarget ? <td className="evalrep-case-target" title={c.target?.label}>{c.target?.label || '—'}</td> : null}
         {dimKeys.map((k) => {
           const d = byKey.get(k);
           return (
@@ -152,7 +163,7 @@ function CaseRow({ c, dimKeys, open, onToggle, showTiming }) {
       </tr>
       {open && (
         <tr className="evalrep-case-detail-row">
-          <td colSpan={dimKeys.length + 4 + (showTiming ? 1 : 0)}>
+          <td colSpan={dimKeys.length + 4 + (showTiming ? 1 : 0) + (showTarget ? 1 : 0)}>
             <div className="evalrep-case-detail">
               {errored && <div className="evalrep-error-note">{c.error}</div>}
               <DetailBlock label="input" value={c.input} />
@@ -223,6 +234,8 @@ export function EvalResultsView({ results, status, history, title, showTiming = 
   const dimKeys = Object.keys(perDim);
   const runStatus = status || (agg.pass ? 'passed' : 'failed');
   const fatal = results.error;
+  const comparisonTargets = Array.isArray(results?.comparison?.targets) ? results.comparison.targets : [];
+  const isComparison = comparisonTargets.length > 1;
 
   const toggle = (idx) => setExpanded((prev) => {
     const next = new Set(prev);
@@ -240,19 +253,19 @@ export function EvalResultsView({ results, status, history, title, showTiming = 
       <div className={`evalrep-verdict evalrep-verdict-${statusTone(runStatus)}`}>
         <div className="evalrep-verdict-main">
           <span className="evalrep-verdict-badge">
-            {runStatus === 'passed' ? 'PASS' : runStatus === 'failed' ? 'FAIL' : 'ERROR'}
+            {isComparison ? 'COMPARE' : runStatus === 'passed' ? 'PASS' : runStatus === 'failed' ? 'FAIL' : 'ERROR'}
           </span>
-          <span className="evalrep-verdict-score">{pct(agg.score)}</span>
-          <span className="evalrep-verdict-threshold">vs {pct(agg.pass_threshold)} threshold</span>
+          <span className="evalrep-verdict-score">{isComparison ? `${comparisonTargets.length} agents` : pct(agg.score)}</span>
+          <span className="evalrep-verdict-threshold">{isComparison ? `${(results.cases || []).length} exact trajectories` : `vs ${pct(agg.pass_threshold)} threshold`}</span>
         </div>
-        <div className="evalrep-verdict-gauge">
+        {!isComparison ? <div className="evalrep-verdict-gauge">
           <span className="evalrep-gauge-track">
             <span className={`evalrep-gauge-fill evalrep-fill-${statusTone(runStatus)}`}
                   style={{ width: `${Math.max(0, Math.min(1, agg.score)) * 100}%` }} />
             <span className="evalrep-gauge-threshold"
                   style={{ left: `${Math.max(0, Math.min(1, agg.pass_threshold)) * 100}%` }} />
           </span>
-        </div>
+        </div> : null}
         <div className="evalrep-verdict-meta">
           <span>{agg.cases_total} case{agg.cases_total === 1 ? '' : 's'}</span>
           {showTiming && results.duration_ms != null ? <span>{elapsed(results.duration_ms)} total</span> : null}
@@ -261,10 +274,25 @@ export function EvalResultsView({ results, status, history, title, showTiming = 
         </div>
       </div>
 
-      <TrendSparkline history={history} threshold={agg.pass_threshold} />
+      {!isComparison ? <TrendSparkline history={history} threshold={agg.pass_threshold} /> : null}
+
+      {isComparison ? (
+        <div className="evalrep-targets" aria-label="Exact agent comparison">
+          <div className="evalrep-section-label">agents · exact totals</div>
+          <div className="evalrep-target-grid">
+            {comparisonTargets.map(target => (
+              <div className="evalrep-target" key={target.target?.key || target.target?.label}>
+                <span title={target.target?.label}>{target.target?.label || 'agent'}</span>
+                <strong>{target.aggregate?.cases_total || 0} test{target.aggregate?.cases_total === 1 ? '' : 's'}</strong>
+                <small>{showTiming ? `${elapsed(targetElapsedMs(target, results.cases))} elapsed · ` : ''}{target.aggregate?.cases_total || 0} case{target.aggregate?.cases_total === 1 ? '' : 's'} · {target.aggregate?.cases_errored || 0} error{target.aggregate?.cases_errored === 1 ? '' : 's'}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* Per-dimension mean meters. */}
-      {dimKeys.length > 0 && (
+      {!isComparison && dimKeys.length > 0 && (
         <div className="evalrep-dims">
           <div className="evalrep-section-label">per-dimension mean</div>
           {dimKeys.map((k) => (
@@ -276,13 +304,14 @@ export function EvalResultsView({ results, status, history, title, showTiming = 
 
       {/* Case table with expandable detail. */}
       <div className="evalrep-cases">
-        <div className="evalrep-section-label">cases</div>
+        <div className="evalrep-section-label">{isComparison ? 'exact trajectories · no per-case averages' : 'cases'}</div>
         <div className="evalrep-table-wrap">
           <table className="evalrep-table">
             <thead>
               <tr>
                 <th aria-label="expand" />
                 <th>case</th>
+                {isComparison ? <th>agent</th> : null}
                 {dimKeys.map((k) => <th key={k} className="evalrep-th-dim">{k}</th>)}
                 <th>score</th>
                 {showTiming ? <th>time</th> : null}
@@ -291,8 +320,8 @@ export function EvalResultsView({ results, status, history, title, showTiming = 
             </thead>
             <tbody>
               {(results.cases || []).map((c, i) => (
-                <CaseRow key={c.case_id || i} c={c} dimKeys={dimKeys}
-                         open={expanded.has(i)} onToggle={() => toggle(i)} showTiming={showTiming} />
+                <CaseRow key={`${c.target?.key || 'case'}:${c.case_id || i}`} c={c} dimKeys={dimKeys}
+                         open={expanded.has(i)} onToggle={() => toggle(i)} showTiming={showTiming} showTarget={isComparison} />
               ))}
             </tbody>
           </table>

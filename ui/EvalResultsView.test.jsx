@@ -69,6 +69,29 @@ describe('EvalResultsView', () => {
     expect(document.querySelector('.evalrep-case-time')?.textContent).toBe('—');
   });
 
+  it('renders comparisons as exact agent and trajectory timing instead of a blended average', () => {
+    const comparison = structuredClone(passing);
+    comparison.duration_ms = 9_876;
+    comparison.cases = [
+      { ...comparison.cases[0], target: { key: 'prod', label: 'Prod' }, duration_ms: 1_234 },
+      { ...comparison.cases[0], target: { key: 'test', label: 'Test' }, duration_ms: 2_345 },
+    ];
+    comparison.aggregate.cases_total = 2;
+    comparison.comparison = { targets: [
+      { target: { key: 'prod', label: 'Prod' }, aggregate: { ...comparison.aggregate, score: 0.8, cases_total: 1 }, duration_ms: 1_234 },
+      { target: { key: 'test', label: 'Test' }, aggregate: { ...comparison.aggregate, score: 0.6, pass: false, cases_total: 1 }, duration_ms: 2_345 },
+    ] };
+    render(<EvalResultsView results={comparison} status="failed" />);
+    expect(screen.getByText('COMPARE')).toBeTruthy();
+    expect(screen.getByText('2 agents')).toBeTruthy();
+    expect(screen.getByText('1.23s elapsed · 1 case · 0 errors')).toBeTruthy();
+    expect(screen.getByText('2.35s elapsed · 1 case · 0 errors')).toBeTruthy();
+    expect(screen.getByText('exact trajectories · no per-case averages')).toBeTruthy();
+    expect(screen.getAllByText('Prod').length).toBeGreaterThan(0);
+    expect(screen.queryByText('60.0%')).toBeNull();
+    expect(screen.queryByText(/per-dimension mean/i)).toBeNull();
+  });
+
   it('shows a running progress state before results arrive', () => {
     render(<EvalResultsView results={null} status="running" />);
     expect(screen.getByText('running evaluation…')).toBeTruthy();
