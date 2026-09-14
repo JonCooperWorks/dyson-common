@@ -1,5 +1,6 @@
 // ui/Modal.jsx
 import React2 from "react";
+import { createPortal } from "react-dom";
 
 // ui/useEscapeKey.js
 import React from "react";
@@ -84,20 +85,23 @@ function Modal({
       first.focus();
     }
   };
-  return /* @__PURE__ */ React2.createElement("div", { className: scrimClassName, onClick: onScrimClick }, /* @__PURE__ */ React2.createElement(
-    "div",
-    {
-      ref: dialogRef,
-      className,
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-label": label,
-      "aria-labelledby": labelledBy,
-      tabIndex: -1,
-      onKeyDown
-    },
-    children
-  ));
+  return createPortal(
+    /* @__PURE__ */ React2.createElement("div", { className: scrimClassName, onClick: onScrimClick }, /* @__PURE__ */ React2.createElement(
+      "div",
+      {
+        ref: dialogRef,
+        className,
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-label": label,
+        "aria-labelledby": labelledBy,
+        tabIndex: -1,
+        onKeyDown
+      },
+      children
+    )),
+    document.body
+  );
 }
 
 // ui/ConfirmModal.jsx
@@ -172,7 +176,7 @@ function EmptyState({ glyph = "\u2205", title, children, actions = null, classNa
 
 // ui/Combobox.jsx
 import React5 from "react";
-import { createPortal } from "react-dom";
+import { createPortal as createPortal2 } from "react-dom";
 function Combobox({
   options,
   value = "",
@@ -290,7 +294,7 @@ function Combobox({
       },
       onKeyDown
     }
-  ), open && !disabled && listPos ? createPortal(
+  ), open && !disabled && listPos ? createPortal2(
     /* @__PURE__ */ React5.createElement(
       "ul",
       {

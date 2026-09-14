@@ -147,3 +147,10 @@ describe('Modal', () => {
     opener.remove();
   });
 });
+
+test('renders its backdrop at document level outside clipping page containers', () => {
+  const { container } = render(<div style={{ transform: 'translateY(0)', overflow: 'hidden' }}><Modal label="Viewport dialog" onClose={() => {}}>Content</Modal></div>);
+  const dialog = screen.getByRole('dialog', { name: 'Viewport dialog' });
+  expect(dialog.parentElement.parentElement).toBe(document.body);
+  expect(container.contains(dialog)).toBe(false);
+});

@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { useEscapeKey } from './useEscapeKey.js';
 
 // Elements that can hold keyboard focus.  The dialog box itself carries
@@ -110,7 +111,7 @@ export function Modal({
     }
   };
 
-  return (
+  return createPortal(
     <div className={scrimClassName} onClick={onScrimClick}>
       <div
         ref={dialogRef}
@@ -124,6 +125,7 @@ export function Modal({
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
