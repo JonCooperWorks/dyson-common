@@ -41,3 +41,13 @@ export {
   SubscriptionConnectModal,
   SUBSCRIPTION_CONNECT_PROVIDERS,
 } from './SubscriptionConnectModal.jsx';
+export {
+  PageHeader,
+  MetricGrid,
+  MetricCard,
+  StatusBadge,
+  Toolbar,
+  DataTable,
+  DetailList,
+  JsonCodeBlock,
+} from './GatewayPrimitives.jsx';

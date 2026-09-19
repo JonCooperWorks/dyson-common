@@ -1467,25 +1467,71 @@ function SubscriptionConnectModal({
     )), /* @__PURE__ */ React10.createElement("button", { type: "submit", className: "subscription-connect-action subscription-connect-primary", disabled: !code.trim() || submitting }, submitting ? "Connecting\u2026" : "Connect")) : null) : isFailed ? /* @__PURE__ */ React10.createElement("p", { className: "subscription-connect-error" }, auth.error || `${subscription.service} sign-in could not start.`) : /* @__PURE__ */ React10.createElement("div", { className: "subscription-starting" }, /* @__PURE__ */ React10.createElement("span", null), "Preparing secure sign-in\u2026"), auth.error && !isFailed ? /* @__PURE__ */ React10.createElement("p", { className: "subscription-connect-error" }, auth.error) : null)
   );
 }
+
+// ui/GatewayPrimitives.jsx
+import React11 from "react";
+function PageHeader({ eyebrow, title, description, actions, children, className = "" }) {
+  return /* @__PURE__ */ React11.createElement("header", { className: `gateway-page-header ${className}`.trim() }, /* @__PURE__ */ React11.createElement("div", { className: "gateway-page-heading" }, eyebrow ? /* @__PURE__ */ React11.createElement("div", { className: "gateway-page-eyebrow" }, eyebrow) : null, /* @__PURE__ */ React11.createElement("h1", null, title), description ? /* @__PURE__ */ React11.createElement("p", null, description) : null), actions ? /* @__PURE__ */ React11.createElement("div", { className: "gateway-page-actions" }, actions) : null, children);
+}
+function MetricGrid({ children, className = "" }) {
+  return /* @__PURE__ */ React11.createElement("div", { className: `gateway-metric-grid ${className}`.trim() }, children);
+}
+function MetricCard({ label, value, detail, tone = "neutral", trend, className = "" }) {
+  return /* @__PURE__ */ React11.createElement("article", { className: `gateway-metric gateway-tone-${tone} ${className}`.trim() }, /* @__PURE__ */ React11.createElement("div", { className: "gateway-metric-label" }, label), /* @__PURE__ */ React11.createElement("div", { className: "gateway-metric-row" }, /* @__PURE__ */ React11.createElement("strong", null, value), trend ? /* @__PURE__ */ React11.createElement("span", { className: "gateway-metric-trend" }, trend) : null), detail ? /* @__PURE__ */ React11.createElement("div", { className: "gateway-metric-detail" }, detail) : null);
+}
+function StatusBadge({ children, tone = "neutral", pulse = false, className = "" }) {
+  return /* @__PURE__ */ React11.createElement("span", { className: `gateway-status gateway-tone-${tone} ${pulse ? "gateway-status-pulse" : ""} ${className}`.trim() }, /* @__PURE__ */ React11.createElement("span", { className: "gateway-status-dot", "aria-hidden": "true" }), children);
+}
+function Toolbar({ children, className = "", "aria-label": ariaLabel = "Filters" }) {
+  return /* @__PURE__ */ React11.createElement("div", { className: `gateway-toolbar ${className}`.trim(), role: "search", "aria-label": ariaLabel }, children);
+}
+function DataTable({ columns, rows, rowKey = "id", empty = null, onRowClick, className = "" }) {
+  if (!rows.length && empty) return empty;
+  return /* @__PURE__ */ React11.createElement("div", { className: `gateway-table-wrap ${className}`.trim() }, /* @__PURE__ */ React11.createElement("table", { className: "gateway-table" }, /* @__PURE__ */ React11.createElement("thead", null, /* @__PURE__ */ React11.createElement("tr", null, columns.map((column) => /* @__PURE__ */ React11.createElement("th", { key: column.key }, column.label)))), /* @__PURE__ */ React11.createElement("tbody", null, rows.map((row2, index) => {
+    const key = typeof rowKey === "function" ? rowKey(row2, index) : row2[rowKey] ?? index;
+    return /* @__PURE__ */ React11.createElement("tr", { key, onClick: onRowClick ? () => onRowClick(row2) : void 0, className: onRowClick ? "gateway-row-action" : "" }, columns.map((column) => /* @__PURE__ */ React11.createElement("td", { key: column.key, "data-label": column.label }, column.render ? column.render(row2[column.key], row2) : row2[column.key])));
+  }))));
+}
+function DetailList({ items, className = "" }) {
+  return /* @__PURE__ */ React11.createElement("dl", { className: `gateway-detail-list ${className}`.trim() }, items.map((item) => /* @__PURE__ */ React11.createElement("div", { className: "gateway-detail-row", key: item.label }, /* @__PURE__ */ React11.createElement("dt", null, item.label), /* @__PURE__ */ React11.createElement("dd", null, item.value ?? "\u2014"))));
+}
+function JsonCodeBlock({ value, label = "JSON", copyLabel = "Copy", className = "" }) {
+  const [copied, setCopied] = React11.useState(false);
+  const text2 = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  async function copy() {
+    await copyToClipboard(text2);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  }
+  return /* @__PURE__ */ React11.createElement("section", { className: `gateway-code ${className}`.trim() }, /* @__PURE__ */ React11.createElement("div", { className: "gateway-code-head" }, /* @__PURE__ */ React11.createElement("span", null, label), /* @__PURE__ */ React11.createElement("button", { type: "button", onClick: copy }, copied ? "Copied" : copyLabel)), /* @__PURE__ */ React11.createElement("pre", null, /* @__PURE__ */ React11.createElement("code", null, text2)));
+}
 export {
   Combobox,
   ComputerMark,
   ConfirmModal,
   DEFAULT_MARK_VARIANT,
   DYSON_BLUE,
+  DataTable,
+  DetailList,
   Glyph as DysonGlyph,
   DysonMark,
   EmptyState,
   EvalReportView,
   EvalResultsView,
+  JsonCodeBlock,
   MARK_VARIANTS,
   MARK_VARIANT_LABELS,
   MARK_VARIANT_NAMES,
+  MetricCard,
+  MetricGrid,
   Modal,
+  PageHeader,
   SUBSCRIPTION_CONNECT_PROVIDERS,
   SecurityReportView,
+  StatusBadge,
   SubscriptionConnectModal,
   MODES as THEME_MODES,
+  Toolbar,
   base64url,
   copyToClipboard,
   createStore,

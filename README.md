@@ -8,6 +8,19 @@ are independent checkouts that previously kept hand-synced copies of these types
 Leaf crate by design: pure types + serde + small pure helpers. The reqwest-based
 OAuth flow is behind the `oauth-client` feature; everything else is dependency-light.
 
+The repository also contains the separate `dyson-inference-protocol` crate.
+It owns the framework-neutral public inference contract: OpenAI Chat
+Completions, Anthropic Messages, OpenAI Responses, model route classification,
+SDK-shaped errors, and response/SSE translation. Hosts keep authentication,
+billing, policy, provider credentials, and audit persistence in their own
+application.
+
+Its generic `ModelRouter<T>` is the same deterministic routing seam used by
+Swarm: exact routes win over the longest trailing-star prefix, then regex
+routes, then `*`. The payload is application-defined, so a honeypot can attach
+decoy responses or capture policy while Swarm attaches failover hops and
+billing policy.
+
 ## Modules
 
 | Module | What |
@@ -17,6 +30,17 @@ OAuth flow is behind the `oauth-client` feature; everything else is dependency-l
 | `cost` | `RecentCostCall` — the `/v1/internal/audit/calls` cost-row contract |
 | `feedback` | `FeedbackRating` (+ score, + emoji mapping), `FeedbackEntry` |
 | `marketplace` | published skill-catalog DTOs (`CatalogSkill`, `SkillPackageBody`, …) |
+
+### Inference protocol
+
+```toml
+dyson-inference-protocol = { git = "https://github.com/JonCooperWorks/dyson-common", tag = "v0.1.12" }
+```
+
+Use `classify_route` at the HTTP edge, then pass the normalized OpenAI-shaped
+request through the host's own security and accounting pipeline. The crate has
+no knowledge of API keys, tenants, upstream credentials, or storage, so it can
+also back an isolated honeypot without importing Swarm.
 
 ## Use
 
@@ -42,8 +66,11 @@ The same single-source idea, for the web UIs.  `dyson` and `dyson-swarm`
 both render a React frontend; their shared primitives and design tokens
 live here so the two apps look and behave the same instead of drifting.
 
-- `ui/Modal.jsx`, `ui/Combobox.jsx`, `ui/useEscapeKey.js` — the shared
-  `<Modal>` / `<Combobox>` / `useEscapeKey` primitives (+ colocated tests).
+- `ui/Modal.jsx`, `ui/Combobox.jsx`, `ui/useEscapeKey.js` — shared interaction
+  primitives (+ colocated tests).
+- `ui/GatewayPrimitives.jsx` — page headers, metrics, status badges, filter
+  toolbars, responsive data tables, detail lists, and JSON inspectors for
+  inference and observability products.
 - `ui/tokens.css` — the canonical design tokens (colors, fonts, radius).
 - `ui/components.css` — styles for the shared primitives.
 

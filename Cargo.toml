@@ -33,5 +33,5 @@ oauth-client = ["dep:reqwest", "dep:base64", "dep:rand", "dep:sha2"]
 oidc = ["dep:jsonwebtoken"]
 
 [workspace]
-members = ["telegram"]
+members = ["telegram", "inference-protocol"]
 resolver = "2"
