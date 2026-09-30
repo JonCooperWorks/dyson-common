@@ -852,25 +852,328 @@ function trimFixed(value, digits) {
 }
 
 // ui/clipboard.js
+async function copyText(text2, select = null) {
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error("no clipboard API");
+    await navigator.clipboard.writeText(text2);
+    return "copied";
+  } catch {
+    if (legacyCopy(text2)) return "copied";
+    if (select) {
+      window.getSelection()?.selectAllChildren(select);
+      return "selected";
+    }
+    return "failed";
+  }
+}
+async function copyFetched(load) {
+  const text2 = load();
+  try {
+    if (!window.ClipboardItem || !navigator.clipboard?.write) throw new Error("no ClipboardItem");
+    await navigator.clipboard.write([new window.ClipboardItem({ "text/plain": text2.then((t) => new Blob([t], { type: "text/plain" })) })]);
+    return "copied";
+  } catch {
+    try {
+      return await copyText(await text2);
+    } catch {
+      return "failed";
+    }
+  }
+}
 async function copyToClipboard(text2) {
   if (!text2) return false;
+  return await copyText(text2) === "copied";
+}
+function legacyCopy(text2) {
+  if (typeof document === "undefined") return false;
+  const box = document.createElement("textarea");
+  box.value = text2;
+  box.setAttribute("readonly", "");
+  box.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none";
+  const active = document.activeElement;
+  document.body.appendChild(box);
+  box.select();
+  let done = false;
   try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text2);
-      return true;
-    }
-    const ta = document.createElement("textarea");
-    ta.value = text2;
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand("copy");
-    document.body.removeChild(ta);
-    return true;
-  } catch (_) {
-    return false;
+    done = document.execCommand("copy");
+  } catch {
+    done = false;
   }
+  box.remove();
+  active?.focus?.({ preventScroll: true });
+  return done;
+}
+
+// ui/buildWatch.js
+function createBuildWatcher({ build, url = "/version.json", every = 5 * 60 * 1e3, reloadKey = "dyson-reloaded" } = {}) {
+  const current = typeof build === "string" && build ? build : "dev";
+  let newer = false;
+  let watching = false;
+  const listeners = /* @__PURE__ */ new Set();
+  async function check() {
+    if (newer || current === "dev") return newer;
+    try {
+      const answer = await fetch(`${url}?t=${Date.now()}`, { cache: "no-store" });
+      if (!answer.ok) return false;
+      const served = (await answer.json())?.build;
+      if (served && served !== current) {
+        newer = true;
+        listeners.forEach((fn) => fn(served));
+      }
+    } catch {
+    }
+    return newer;
+  }
+  function watch() {
+    if (watching || typeof window === "undefined") return;
+    watching = true;
+    setInterval(() => {
+      if (!document.hidden) check();
+    }, every);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) check();
+    });
+    window.addEventListener("focus", check);
+    window.addEventListener("vite:preloadError", (event) => {
+      const key = `${reloadKey}-${current}`;
+      try {
+        if (sessionStorage.getItem(key)) return;
+        sessionStorage.setItem(key, "1");
+      } catch {
+        return;
+      }
+      event.preventDefault();
+      window.location.reload();
+    });
+  }
+  return {
+    build: current,
+    outdated: () => newer,
+    onOutdated(fn) {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+    check,
+    watch
+  };
+}
+
+// ui/useStored.js
+import { useCallback, useEffect, useState } from "react";
+function useStored(key, initial) {
+  const [value, setValue] = useState(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw != null) return JSON.parse(raw);
+    } catch {
+    }
+    return typeof initial === "function" ? initial() : initial;
+  });
+  const set = useCallback((next) => setValue((current) => {
+    const chosen = typeof next === "function" ? next(current) : next;
+    try {
+      localStorage.setItem(key, JSON.stringify(chosen));
+    } catch {
+    }
+    return chosen;
+  }), [key]);
+  return [value, set];
+}
+function useDebounced(value, delay = 250) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
+
+// ui/SegmentedControl.jsx
+import React7 from "react";
+function SegmentedControl({ value, onChange, options, label, className = "" }) {
+  return /* @__PURE__ */ React7.createElement("div", { className: `dc-seg ${className}`.trim(), role: "group", "aria-label": label }, options.map(([id, text2, icon]) => /* @__PURE__ */ React7.createElement("button", { type: "button", key: String(id), "aria-pressed": value === id, className: value === id ? "active" : "", onClick: () => onChange(id) }, icon, text2)));
+}
+
+// ui/Pager.jsx
+import React9, { useState as useState3 } from "react";
+
+// ui/Sorting.jsx
+import React8, { useEffect as useEffect2, useLayoutEffect, useRef as useRef2, useState as useState2 } from "react";
+import { createPortal as createPortal2 } from "react-dom";
+
+// ui/sort.js
+var SORT_NATURAL = { time: true, num: true, text: false, order: false };
+var SORT_DIRECTION = {
+  time: ["oldest first", "newest first"],
+  num: ["lowest first", "highest first"],
+  text: ["A \u2192 Z", "Z \u2192 A"],
+  order: ["lowest first", "highest first"]
+};
+var firstDesc = (column) => column?.[2] ? column[2] === "desc" : SORT_NATURAL[column?.[1]] ?? false;
+function parseSort(value) {
+  const text2 = (value || "").trim();
+  if (!text2 || text2 === "-") return null;
+  return text2.startsWith("-") ? { key: text2.slice(1), desc: true } : { key: text2, desc: false };
+}
+var sortParam = (sort) => sort ? `${sort.desc ? "-" : ""}${sort.key}` : "";
+function sortWays(kind) {
+  const [up, down] = SORT_DIRECTION[kind] || SORT_DIRECTION.text;
+  return SORT_NATURAL[kind] ? [[true, down], [false, up]] : [[false, up], [true, down]];
+}
+function sortRows(rows, sort, value) {
+  if (!sort) return rows;
+  const keyed = rows.map((row2, i) => {
+    const v = value(row2, sort.key);
+    return [v == null || v === "" || Number.isNaN(v) ? null : typeof v === "string" ? v.toLowerCase() : v, i, row2];
+  });
+  keyed.sort((a, b) => {
+    if (a[0] === null || b[0] === null) return a[0] === b[0] ? a[1] - b[1] : a[0] === null ? 1 : -1;
+    const order = a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0;
+    return (sort.desc ? -order : order) || a[1] - b[1];
+  });
+  return keyed.map((k) => k[2]);
+}
+
+// ui/Sorting.jsx
+function useSorter(columns, { value, onChange, fallback = "newest first" }) {
+  const parsed = parseSort(value);
+  const active = parsed && columns[parsed.key] ? parsed : null;
+  const set = (next) => onChange(sortParam(next));
+  const cycle = (key) => {
+    const natural = firstDesc(columns[key]);
+    if (active?.key !== key) return set({ key, desc: natural });
+    if (active.desc === natural) return set({ key, desc: !natural });
+    return set(null);
+  };
+  const describe = (sort) => {
+    const [label, kind] = columns[sort.key] || [sort.key, "text"];
+    return { label, direction: (SORT_DIRECTION[kind] || SORT_DIRECTION.text)[sort.desc ? 1 : 0] };
+  };
+  return { columns, active, param: sortParam(active), set, cycle, describe, fallback };
+}
+function SortGlyph({ dir }) {
+  return /* @__PURE__ */ React8.createElement("svg", { className: `dc-sort-glyph ${dir || ""}`.trim(), width: "8", height: "12", viewBox: "0 0 8 12", "aria-hidden": "true" }, /* @__PURE__ */ React8.createElement("path", { className: "up", d: "M4 1.5 7 5H1z" }), /* @__PURE__ */ React8.createElement("path", { className: "down", d: "M4 10.5 1 7h6z" }));
+}
+var Stroke = ({ d, size }) => /* @__PURE__ */ React8.createElement("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React8.createElement("path", { d }));
+var CLOSE = "M18 6L6 18M6 6l12 12";
+var DOWN = "M6 9l6 6 6-6";
+function SortTh({ sorter, keys, children, className = "", title }) {
+  const [open, setOpen] = useState2(false);
+  const button = useRef2(null);
+  const onKey = keys.find((k) => sorter.active?.key === k);
+  const dir = onKey ? sorter.active.desc ? "desc" : "asc" : null;
+  const primary = onKey || keys[0];
+  const aside = onKey && onKey !== keys[0] ? sorter.columns[onKey][0] : null;
+  const described = onKey ? sorter.describe(sorter.active) : null;
+  const hint = described ? `Sorted by ${described.label.toLowerCase()}, ${described.direction}. Click to ${sorter.active.desc === firstDesc(sorter.columns[onKey]) ? "reverse" : `go back to ${sorter.fallback}`}.` : `Sort by ${sorter.columns[primary][0].toLowerCase()}`;
+  return /* @__PURE__ */ React8.createElement("th", { className: `dc-sortable ${onKey ? "sorted" : ""} ${className}`.trim(), "aria-sort": dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none", title }, /* @__PURE__ */ React8.createElement("span", { className: "dc-sort-head" }, /* @__PURE__ */ React8.createElement("button", { type: "button", className: "dc-sort-btn", onClick: () => sorter.cycle(primary), title: hint }, /* @__PURE__ */ React8.createElement("span", { className: "dc-sort-label" }, aside ? /* @__PURE__ */ React8.createElement("span", { className: "dc-sort-aside" }, aside) : children), /* @__PURE__ */ React8.createElement(SortGlyph, { dir })), keys.length > 1 && /* @__PURE__ */ React8.createElement("button", { type: "button", ref: button, className: "dc-sort-more", "aria-haspopup": "menu", "aria-expanded": open, "aria-label": `More ways to sort ${typeof children === "string" ? children : "this column"}`, title: "Sort by\u2026", onClick: () => setOpen((o) => !o) }, /* @__PURE__ */ React8.createElement(Stroke, { d: DOWN, size: 10 }))), open && /* @__PURE__ */ React8.createElement(SortMenu, { anchor: button, sorter, keys, onClose: () => setOpen(false) }));
+}
+function SortMenu({ anchor, sorter, keys, onClose }) {
+  const menu = useRef2(null);
+  const [at, setAt] = useState2(null);
+  useLayoutEffect(() => {
+    const place = () => {
+      const r = anchor.current?.getBoundingClientRect();
+      if (r) setAt({ top: r.bottom + 6, left: Math.max(8, Math.min(r.right - 232, window.innerWidth - 240)) });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [anchor]);
+  useEffect2(() => {
+    const onDown = (event) => {
+      if (!menu.current?.contains(event.target) && !anchor.current?.contains(event.target)) onClose();
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        onClose();
+        anchor.current?.focus();
+      }
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const items = [...menu.current?.querySelectorAll("button") || []];
+        const i = items.indexOf(document.activeElement);
+        items[(i + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    menu.current?.querySelector('button[aria-checked="true"], button')?.focus();
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [anchor, onClose]);
+  const pick = (sort) => {
+    sorter.set(sort);
+    onClose();
+  };
+  return createPortal2(/* @__PURE__ */ React8.createElement("div", { ref: menu, className: "dc-sort-menu", role: "menu", style: at ? { top: at.top, left: at.left } : { visibility: "hidden" } }, /* @__PURE__ */ React8.createElement("div", { className: "dc-sort-menu-head" }, "Sort by"), keys.map((key) => {
+    const [label, kind] = sorter.columns[key];
+    return /* @__PURE__ */ React8.createElement("div", { key, className: "dc-sort-menu-row" }, /* @__PURE__ */ React8.createElement("span", { className: "dc-sort-menu-label" }, label), /* @__PURE__ */ React8.createElement("span", { className: "dc-sort-menu-ways" }, sortWays(kind).map(([desc, text2]) => {
+      const on = sorter.active?.key === key && sorter.active.desc === desc;
+      return /* @__PURE__ */ React8.createElement("button", { type: "button", key: String(desc), role: "menuitemradio", "aria-checked": on, className: on ? "on" : "", onClick: () => pick(on ? null : { key, desc }) }, /* @__PURE__ */ React8.createElement(SortGlyph, { dir: desc ? "desc" : "asc" }), text2);
+    })));
+  }), sorter.active && /* @__PURE__ */ React8.createElement("button", { type: "button", className: "dc-sort-menu-reset", onClick: () => pick(null) }, /* @__PURE__ */ React8.createElement(Stroke, { d: CLOSE, size: 11 }), "Back to ", sorter.fallback)), document.body);
+}
+function SortPill({ sorter }) {
+  if (!sorter?.active) return null;
+  const { label, direction } = sorter.describe(sorter.active);
+  return /* @__PURE__ */ React8.createElement("span", { className: "dc-sort-pill", role: "status" }, /* @__PURE__ */ React8.createElement(SortGlyph, { dir: sorter.active.desc ? "desc" : "asc" }), /* @__PURE__ */ React8.createElement("span", null, "Sorted by ", /* @__PURE__ */ React8.createElement("b", null, label), " \xB7 ", direction), /* @__PURE__ */ React8.createElement("button", { type: "button", onClick: () => sorter.set(null), "aria-label": `Stop sorting; back to ${sorter.fallback}`, title: `Back to ${sorter.fallback}` }, /* @__PURE__ */ React8.createElement(Stroke, { d: CLOSE, size: 11 })));
+}
+function SortPicker({ sorter, always = false, boxClassName = "" }) {
+  const options = [{ value: "", label: `Default \xB7 ${sorter.fallback}` }, ...Object.entries(sorter.columns).flatMap(([key, [label, kind]]) => sortWays(kind).map(([desc, text2]) => ({ value: sortParam({ key, desc }), label: `${label} \xB7 ${text2}` })))];
+  return /* @__PURE__ */ React8.createElement("div", { className: `dc-sort-picker ${always ? "always" : ""}`.trim() }, /* @__PURE__ */ React8.createElement("span", null, "Sort"), /* @__PURE__ */ React8.createElement("div", { className: `dc-sort-picker-box ${boxClassName}`.trim() }, /* @__PURE__ */ React8.createElement(Combobox, { ariaLabel: "Sort by", options, value: sorter.param, onSelect: (option) => sorter.set(parseSort(option.value)), onClear: () => sorter.set(null) })));
+}
+
+// ui/Pager.jsx
+var PAGE_SIZES = [25, 50, 100, 200];
+function usePageSize({ storageKey = "dyson-page-size", sizes = PAGE_SIZES, fallback = 50 } = {}) {
+  const [size, setSize] = useState3(() => {
+    try {
+      const n = Number(localStorage.getItem(storageKey));
+      return sizes.includes(n) ? n : fallback;
+    } catch {
+      return fallback;
+    }
+  });
+  const choose = (n) => {
+    setSize(n);
+    try {
+      localStorage.setItem(storageKey, String(n));
+    } catch {
+    }
+  };
+  return [size, choose];
+}
+var Chevron = ({ d }) => /* @__PURE__ */ React9.createElement("svg", { width: "13", height: "13", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React9.createElement("path", { d }));
+var FIRST = "M11 17l-5-5 5-5M18 17l-5-5 5-5";
+var PREV = "M15 18l-6-6 6-6";
+var NEXT = "M9 18l6-6-6-6";
+var LAST = "M13 17l5-5-5-5M6 17l5-5-5-5";
+function Pager({ page, pages = null, from, shown, total, size, onPage, onSize, sizes = PAGE_SIZES, busy = false, noun = ["row", "rows"], note = null, sorter = null, className = "" }) {
+  const [draft, setDraft] = useState3(null);
+  const last = pages ?? null;
+  const canPrev = page > 1;
+  const canNext = last == null ? shown >= size : page < last;
+  const go = (n) => {
+    const target = Math.max(1, last == null ? n : Math.min(last, n));
+    if (target !== page) onPage(target);
+  };
+  function jump(event) {
+    event.preventDefault();
+    const n = Number(draft);
+    setDraft(null);
+    if (Number.isFinite(n) && n >= 1) go(Math.round(n));
+  }
+  const range = shown ? `${formatCount(from + 1)}\u2013${formatCount(from + shown)}` : "0";
+  const step = (label, d, onClick, disabled, extra = {}) => /* @__PURE__ */ React9.createElement("button", { type: "button", className: "dc-pager-btn", onClick, disabled, title: label, "aria-label": label.replace(/\s+[←→]$/, ""), ...extra }, /* @__PURE__ */ React9.createElement(Chevron, { d }));
+  return /* @__PURE__ */ React9.createElement("nav", { className: `dc-pager ${className}`.trim(), "aria-label": "Pages" }, /* @__PURE__ */ React9.createElement("span", { className: "dc-pager-range" }, range, " of ", formatCount(total), " ", total === 1 ? noun[0] : noun[1], note && /* @__PURE__ */ React9.createElement("span", { className: "dc-pager-note" }, " \xB7 ", note), busy && /* @__PURE__ */ React9.createElement("span", { className: "dc-pager-note" }, " \xB7 loading\u2026")), sorter && /* @__PURE__ */ React9.createElement(SortPill, { sorter }), (canPrev || canNext) && /* @__PURE__ */ React9.createElement("span", { className: "dc-pager-steps" }, step("First page", FIRST, () => go(1), !canPrev), step("Previous page  \u2190", PREV, () => go(page - 1), !canPrev, { "data-pager": "prev" }), /* @__PURE__ */ React9.createElement("form", { className: "dc-pager-at", onSubmit: jump }, /* @__PURE__ */ React9.createElement("span", null, "Page"), /* @__PURE__ */ React9.createElement("input", { type: "number", min: "1", max: last ?? void 0, value: draft ?? page, onChange: (e) => setDraft(e.target.value), onBlur: () => setDraft(null), "aria-label": "Page number" }), last != null && /* @__PURE__ */ React9.createElement("span", null, "of ", formatCount(last))), step("Next page  \u2192", NEXT, () => go(page + 1), !canNext, { "data-pager": "next" }), last != null && step("Last page", LAST, () => go(last), !canNext)), onSize && /* @__PURE__ */ React9.createElement("span", { className: "dc-pager-size" }, /* @__PURE__ */ React9.createElement("span", null, "Rows"), /* @__PURE__ */ React9.createElement(SegmentedControl, { label: "Rows per page", value: size, onChange: onSize, options: sizes.map((n) => [n, String(n)]) })));
 }
 
 // ui/theme.js
@@ -939,7 +1242,7 @@ function createThemeController({ storageKey, stripInstanceLabel = false }) {
 }
 
 // ui/SecurityReportView.jsx
-import React7, { useState, useEffect, useMemo } from "react";
+import React10, { useState as useState4, useEffect as useEffect3, useMemo } from "react";
 var SEVERITY_LABELS = ["critical", "high", "medium", "low"];
 var SEVERITY_COLOR = {
   critical: "#cf2a2a",
@@ -973,8 +1276,8 @@ async function loadFromMindRoute(reportPath) {
   if (!parsed || !Array.isArray(parsed.findings)) throw new Error("bad doc");
   return parsed;
 }
-function Chevron() {
-  return /* @__PURE__ */ React7.createElement(
+function Chevron2() {
+  return /* @__PURE__ */ React10.createElement(
     "svg",
     {
       width: 10,
@@ -986,20 +1289,20 @@ function Chevron() {
       strokeLinecap: "round",
       strokeLinejoin: "round"
     },
-    /* @__PURE__ */ React7.createElement("path", { d: "m5 4 4 4-4 4" })
+    /* @__PURE__ */ React10.createElement("path", { d: "m5 4 4 4-4 4" })
   );
 }
 function SecurityReportView({ reportPath, fallback, load = loadFromMindRoute }) {
-  const [doc, setDoc] = useState(null);
-  const [unavailable, setUnavailable] = useState(false);
-  const [view, setView] = useState("cards");
-  const [sevFilter, setSevFilter] = useState("");
-  const [classFilter, setClassFilter] = useState("");
-  const [flagFilter, setFlagFilter] = useState("all");
-  const [query, setQuery] = useState("");
-  const [expanded, setExpanded] = useState(() => /* @__PURE__ */ new Set());
-  const [copiedReport, setCopiedReport] = useState(false);
-  useEffect(() => {
+  const [doc, setDoc] = useState4(null);
+  const [unavailable, setUnavailable] = useState4(false);
+  const [view, setView] = useState4("cards");
+  const [sevFilter, setSevFilter] = useState4("");
+  const [classFilter, setClassFilter] = useState4("");
+  const [flagFilter, setFlagFilter] = useState4("all");
+  const [query, setQuery] = useState4("");
+  const [expanded, setExpanded] = useState4(() => /* @__PURE__ */ new Set());
+  const [copiedReport, setCopiedReport] = useState4(false);
+  useEffect3(() => {
     let cancelled = false;
     setDoc(null);
     setUnavailable(false);
@@ -1036,11 +1339,11 @@ function SecurityReportView({ reportPath, fallback, load = loadFromMindRoute }) 
     }
   };
   const summary = doc.summary || {};
-  return /* @__PURE__ */ React7.createElement("div", { className: "secrep" }, /* @__PURE__ */ React7.createElement("div", { className: "secrep-inner" }, /* @__PURE__ */ React7.createElement("div", { className: "secrep-summary" }, /* @__PURE__ */ React7.createElement("span", { className: "secrep-summary-count" }, doc.findings.length, " ", doc.findings.length === 1 ? "finding" : "findings"), SEVERITY_LABELS.map((sev) => {
+  return /* @__PURE__ */ React10.createElement("div", { className: "secrep" }, /* @__PURE__ */ React10.createElement("div", { className: "secrep-inner" }, /* @__PURE__ */ React10.createElement("div", { className: "secrep-summary" }, /* @__PURE__ */ React10.createElement("span", { className: "secrep-summary-count" }, doc.findings.length, " ", doc.findings.length === 1 ? "finding" : "findings"), SEVERITY_LABELS.map((sev) => {
     const n = summary[sev] || 0;
     if (!n) return null;
-    return /* @__PURE__ */ React7.createElement("span", { key: sev, className: "secrep-sev" }, /* @__PURE__ */ React7.createElement("span", { className: "secrep-dot", style: { background: SEVERITY_COLOR[sev] } }), /* @__PURE__ */ React7.createElement("span", { className: "secrep-sev-n" }, n), /* @__PURE__ */ React7.createElement("span", { className: "secrep-sev-label" }, sev));
-  }), /* @__PURE__ */ React7.createElement("span", null, summary.new || 0, " new \xB7 ", summary.recurring || 0, " recurring"), /* @__PURE__ */ React7.createElement("span", { className: "secrep-mono secrep-summary-path", title: doc.target && doc.target.repo_path }, doc.target && doc.target.repo_path), doc.model && doc.model.model && /* @__PURE__ */ React7.createElement("span", { className: "secrep-mono" }, doc.model.model)), /* @__PURE__ */ React7.createElement("div", { className: "secrep-controls" }, view === "cards" && /* @__PURE__ */ React7.createElement(React7.Fragment, null, /* @__PURE__ */ React7.createElement("select", { className: "secrep-select", value: sevFilter, onChange: (e) => setSevFilter(e.target.value) }, /* @__PURE__ */ React7.createElement("option", { value: "" }, "all severities"), SEVERITY_LABELS.map((s) => /* @__PURE__ */ React7.createElement("option", { key: s, value: s }, s))), classes.length > 0 && /* @__PURE__ */ React7.createElement("select", { className: "secrep-select", value: classFilter, onChange: (e) => setClassFilter(e.target.value) }, /* @__PURE__ */ React7.createElement("option", { value: "" }, "all classes"), classes.map((c) => /* @__PURE__ */ React7.createElement("option", { key: c, value: c }, c))), /* @__PURE__ */ React7.createElement("select", { className: "secrep-select", value: flagFilter, onChange: (e) => setFlagFilter(e.target.value) }, /* @__PURE__ */ React7.createElement("option", { value: "all" }, "new + recurring"), /* @__PURE__ */ React7.createElement("option", { value: "new" }, "new"), /* @__PURE__ */ React7.createElement("option", { value: "recurring" }, "recurring")), /* @__PURE__ */ React7.createElement(
+    return /* @__PURE__ */ React10.createElement("span", { key: sev, className: "secrep-sev" }, /* @__PURE__ */ React10.createElement("span", { className: "secrep-dot", style: { background: SEVERITY_COLOR[sev] } }), /* @__PURE__ */ React10.createElement("span", { className: "secrep-sev-n" }, n), /* @__PURE__ */ React10.createElement("span", { className: "secrep-sev-label" }, sev));
+  }), /* @__PURE__ */ React10.createElement("span", null, summary.new || 0, " new \xB7 ", summary.recurring || 0, " recurring"), /* @__PURE__ */ React10.createElement("span", { className: "secrep-mono secrep-summary-path", title: doc.target && doc.target.repo_path }, doc.target && doc.target.repo_path), doc.model && doc.model.model && /* @__PURE__ */ React10.createElement("span", { className: "secrep-mono" }, doc.model.model)), /* @__PURE__ */ React10.createElement("div", { className: "secrep-controls" }, view === "cards" && /* @__PURE__ */ React10.createElement(React10.Fragment, null, /* @__PURE__ */ React10.createElement("select", { className: "secrep-select", value: sevFilter, onChange: (e) => setSevFilter(e.target.value) }, /* @__PURE__ */ React10.createElement("option", { value: "" }, "all severities"), SEVERITY_LABELS.map((s) => /* @__PURE__ */ React10.createElement("option", { key: s, value: s }, s))), classes.length > 0 && /* @__PURE__ */ React10.createElement("select", { className: "secrep-select", value: classFilter, onChange: (e) => setClassFilter(e.target.value) }, /* @__PURE__ */ React10.createElement("option", { value: "" }, "all classes"), classes.map((c) => /* @__PURE__ */ React10.createElement("option", { key: c, value: c }, c))), /* @__PURE__ */ React10.createElement("select", { className: "secrep-select", value: flagFilter, onChange: (e) => setFlagFilter(e.target.value) }, /* @__PURE__ */ React10.createElement("option", { value: "all" }, "new + recurring"), /* @__PURE__ */ React10.createElement("option", { value: "new" }, "new"), /* @__PURE__ */ React10.createElement("option", { value: "recurring" }, "recurring")), /* @__PURE__ */ React10.createElement(
     "input",
     {
       className: "secrep-search",
@@ -1049,7 +1352,7 @@ function SecurityReportView({ reportPath, fallback, load = loadFromMindRoute }) 
       value: query,
       onChange: (e) => setQuery(e.target.value)
     }
-  )), /* @__PURE__ */ React7.createElement("button", { className: "secrep-btn", onClick: copyReport }, copiedReport ? "copied" : "copy report"), /* @__PURE__ */ React7.createElement("span", { className: "secrep-spacer" }), /* @__PURE__ */ React7.createElement(
+  )), /* @__PURE__ */ React10.createElement("button", { className: "secrep-btn", onClick: copyReport }, copiedReport ? "copied" : "copy report"), /* @__PURE__ */ React10.createElement("span", { className: "secrep-spacer" }), /* @__PURE__ */ React10.createElement(
     "button",
     {
       className: "secrep-btn secrep-toggle",
@@ -1057,7 +1360,7 @@ function SecurityReportView({ reportPath, fallback, load = loadFromMindRoute }) 
       onClick: () => setView("cards")
     },
     "rendered"
-  ), /* @__PURE__ */ React7.createElement(
+  ), /* @__PURE__ */ React10.createElement(
     "button",
     {
       className: "secrep-btn secrep-toggle",
@@ -1065,7 +1368,7 @@ function SecurityReportView({ reportPath, fallback, load = loadFromMindRoute }) 
       onClick: () => setView("report")
     },
     "report"
-  ), /* @__PURE__ */ React7.createElement(
+  ), /* @__PURE__ */ React10.createElement(
     "button",
     {
       className: "secrep-btn secrep-toggle",
@@ -1073,13 +1376,13 @@ function SecurityReportView({ reportPath, fallback, load = loadFromMindRoute }) 
       onClick: () => setView("json")
     },
     "json"
-  )), view === "json" ? /* @__PURE__ */ React7.createElement("div", { className: "secrep-json-wrap" }, /* @__PURE__ */ React7.createElement("pre", { className: "secrep-json" }, JSON.stringify(doc, null, 2))) : view === "report" ? (
+  )), view === "json" ? /* @__PURE__ */ React10.createElement("div", { className: "secrep-json-wrap" }, /* @__PURE__ */ React10.createElement("pre", { className: "secrep-json" }, JSON.stringify(doc, null, 2))) : view === "report" ? (
     // The full written report — the artefact's markdown body, the
     // same node the fetch-failure fallback renders.  Lets the reader
     // see the narrative + evidence even when the structured findings
     // list is empty (e.g. a pentest that confirmed no findings).
-    /* @__PURE__ */ React7.createElement("div", { className: "secrep-report" }, fallback)
-  ) : /* @__PURE__ */ React7.createElement(React7.Fragment, null, visible.length === 0 && /* @__PURE__ */ React7.createElement("div", { className: "secrep-empty" }, doc.findings.length === 0 ? "No confirmed findings." : "No findings match."), groups.map(({ sev, items }) => /* @__PURE__ */ React7.createElement("div", { key: sev, className: "secrep-group" }, /* @__PURE__ */ React7.createElement("div", { className: "secrep-eyebrow" }, /* @__PURE__ */ React7.createElement("span", { className: "secrep-dot", style: { background: SEVERITY_COLOR[sev] } }), sev, " \xB7 ", items.length), items.map(({ f, idx }) => /* @__PURE__ */ React7.createElement(
+    /* @__PURE__ */ React10.createElement("div", { className: "secrep-report" }, fallback)
+  ) : /* @__PURE__ */ React10.createElement(React10.Fragment, null, visible.length === 0 && /* @__PURE__ */ React10.createElement("div", { className: "secrep-empty" }, doc.findings.length === 0 ? "No confirmed findings." : "No findings match."), groups.map(({ sev, items }) => /* @__PURE__ */ React10.createElement("div", { key: sev, className: "secrep-group" }, /* @__PURE__ */ React10.createElement("div", { className: "secrep-eyebrow" }, /* @__PURE__ */ React10.createElement("span", { className: "secrep-dot", style: { background: SEVERITY_COLOR[sev] } }), sev, " \xB7 ", items.length), items.map(({ f, idx }) => /* @__PURE__ */ React10.createElement(
     FindingCard,
     {
       key: idx,
@@ -1091,7 +1394,7 @@ function SecurityReportView({ reportPath, fallback, load = loadFromMindRoute }) 
   )))))));
 }
 function FindingCard({ finding: f, sev, open, onToggle }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState4(false);
   const copyFinding = async (event) => {
     event.stopPropagation();
     if (await copyToClipboard(JSON.stringify(f, null, 2))) {
@@ -1099,18 +1402,18 @@ function FindingCard({ finding: f, sev, open, onToggle }) {
       setTimeout(() => setCopied(false), 1200);
     }
   };
-  return /* @__PURE__ */ React7.createElement("div", { className: "secrep-card" }, /* @__PURE__ */ React7.createElement("div", { className: "secrep-card-head", onClick: onToggle }, /* @__PURE__ */ React7.createElement("span", { className: "secrep-caret", style: { transform: open ? "rotate(90deg)" : "none" } }, /* @__PURE__ */ React7.createElement(Chevron, null)), /* @__PURE__ */ React7.createElement("span", { className: "secrep-dot", style: { background: SEVERITY_COLOR[sev] } }), /* @__PURE__ */ React7.createElement("span", { className: "secrep-card-title" }, f.title || f.run_finding_id || f.id), f.key && /* @__PURE__ */ React7.createElement("span", { className: "secrep-chip" }, f.key), f.recurring && /* @__PURE__ */ React7.createElement("span", { className: "secrep-chip" }, "recurring x", f.occurrences), /* @__PURE__ */ React7.createElement("button", { className: "secrep-btn secrep-copy-finding", type: "button", onClick: copyFinding }, copied ? "copied" : "copy")), open && /* @__PURE__ */ React7.createElement("div", { className: "secrep-card-body" }, row("class", f.vulnerability_class && /* @__PURE__ */ React7.createElement("span", { className: "secrep-chip" }, f.vulnerability_class)), row("boundary", text(f.trust_boundary)), row("flow", (f.entry_point || f.sink_or_decision) && /* @__PURE__ */ React7.createElement("span", { className: "secrep-mono" }, f.entry_point, f.entry_point && f.sink_or_decision ? " \u2192 " : "", f.sink_or_decision)), row("root cause", text(f.root_cause)), row("reachability", text(f.reachability)), row("impact", text(f.tenant_or_instance_impact)), row("rationale", text(f.severity_rationale)), row("fix", text(f.fix_recommendation)), row("paths", Array.isArray(f.affected_paths) && f.affected_paths.length > 0 && /* @__PURE__ */ React7.createElement("span", { className: "secrep-paths" }, f.affected_paths.map((p, i) => /* @__PURE__ */ React7.createElement("span", { key: i, className: "secrep-chip" }, p)))), row("evidence", Array.isArray(f.evidence) && f.evidence.length > 0 && /* @__PURE__ */ React7.createElement("pre", { className: "secrep-pre secrep-pre-wrap" }, f.evidence.join("\n"))), row("patch", !!(f.suggested_patch && f.suggested_patch.trim()) && /* @__PURE__ */ React7.createElement("pre", { className: "secrep-pre" }, f.suggested_patch))));
+  return /* @__PURE__ */ React10.createElement("div", { className: "secrep-card" }, /* @__PURE__ */ React10.createElement("div", { className: "secrep-card-head", onClick: onToggle }, /* @__PURE__ */ React10.createElement("span", { className: "secrep-caret", style: { transform: open ? "rotate(90deg)" : "none" } }, /* @__PURE__ */ React10.createElement(Chevron2, null)), /* @__PURE__ */ React10.createElement("span", { className: "secrep-dot", style: { background: SEVERITY_COLOR[sev] } }), /* @__PURE__ */ React10.createElement("span", { className: "secrep-card-title" }, f.title || f.run_finding_id || f.id), f.key && /* @__PURE__ */ React10.createElement("span", { className: "secrep-chip" }, f.key), f.recurring && /* @__PURE__ */ React10.createElement("span", { className: "secrep-chip" }, "recurring x", f.occurrences), /* @__PURE__ */ React10.createElement("button", { className: "secrep-btn secrep-copy-finding", type: "button", onClick: copyFinding }, copied ? "copied" : "copy")), open && /* @__PURE__ */ React10.createElement("div", { className: "secrep-card-body" }, row("class", f.vulnerability_class && /* @__PURE__ */ React10.createElement("span", { className: "secrep-chip" }, f.vulnerability_class)), row("boundary", text(f.trust_boundary)), row("flow", (f.entry_point || f.sink_or_decision) && /* @__PURE__ */ React10.createElement("span", { className: "secrep-mono" }, f.entry_point, f.entry_point && f.sink_or_decision ? " \u2192 " : "", f.sink_or_decision)), row("root cause", text(f.root_cause)), row("reachability", text(f.reachability)), row("impact", text(f.tenant_or_instance_impact)), row("rationale", text(f.severity_rationale)), row("fix", text(f.fix_recommendation)), row("paths", Array.isArray(f.affected_paths) && f.affected_paths.length > 0 && /* @__PURE__ */ React10.createElement("span", { className: "secrep-paths" }, f.affected_paths.map((p, i) => /* @__PURE__ */ React10.createElement("span", { key: i, className: "secrep-chip" }, p)))), row("evidence", Array.isArray(f.evidence) && f.evidence.length > 0 && /* @__PURE__ */ React10.createElement("pre", { className: "secrep-pre secrep-pre-wrap" }, f.evidence.join("\n"))), row("patch", !!(f.suggested_patch && f.suggested_patch.trim()) && /* @__PURE__ */ React10.createElement("pre", { className: "secrep-pre" }, f.suggested_patch))));
 }
 function text(v) {
-  return v && String(v).trim() ? /* @__PURE__ */ React7.createElement("span", null, v) : null;
+  return v && String(v).trim() ? /* @__PURE__ */ React10.createElement("span", null, v) : null;
 }
 function row(label, value) {
   if (!value) return null;
-  return /* @__PURE__ */ React7.createElement(React7.Fragment, { key: label }, /* @__PURE__ */ React7.createElement("span", { className: "secrep-label" }, label), /* @__PURE__ */ React7.createElement("span", { className: "secrep-value" }, value));
+  return /* @__PURE__ */ React10.createElement(React10.Fragment, { key: label }, /* @__PURE__ */ React10.createElement("span", { className: "secrep-label" }, label), /* @__PURE__ */ React10.createElement("span", { className: "secrep-value" }, value));
 }
 
 // ui/EvalResultsView.jsx
-import React8, { useState as useState2 } from "react";
+import React11, { useState as useState5 } from "react";
 var TERMINAL = /* @__PURE__ */ new Set(["passed", "failed", "error"]);
 function pct(x) {
   if (!Number.isFinite(x)) return "\u2014";
@@ -1148,8 +1451,8 @@ function statusTone(status) {
   if (status === "error") return "error";
   return "pending";
 }
-function Chevron2() {
-  return /* @__PURE__ */ React8.createElement(
+function Chevron3() {
+  return /* @__PURE__ */ React11.createElement(
     "svg",
     {
       width: 10,
@@ -1162,18 +1465,18 @@ function Chevron2() {
       strokeLinejoin: "round",
       "aria-hidden": "true"
     },
-    /* @__PURE__ */ React8.createElement("path", { d: "m5 4 4 4-4 4" })
+    /* @__PURE__ */ React11.createElement("path", { d: "m5 4 4 4-4 4" })
   );
 }
 function Meter({ label, value, tone = "accent", title }) {
   const clamped = Math.max(0, Math.min(1, Number(value) || 0));
-  return /* @__PURE__ */ React8.createElement("div", { className: "evalrep-meter", title }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-meter-label" }, label), /* @__PURE__ */ React8.createElement("span", { className: "evalrep-meter-track" }, /* @__PURE__ */ React8.createElement(
+  return /* @__PURE__ */ React11.createElement("div", { className: "evalrep-meter", title }, /* @__PURE__ */ React11.createElement("span", { className: "evalrep-meter-label" }, label), /* @__PURE__ */ React11.createElement("span", { className: "evalrep-meter-track" }, /* @__PURE__ */ React11.createElement(
     "span",
     {
       className: `evalrep-meter-fill evalrep-fill-${tone}`,
       style: { width: `${clamped * 100}%` }
     }
-  )), /* @__PURE__ */ React8.createElement("span", { className: "evalrep-meter-value" }, pct(clamped)));
+  )), /* @__PURE__ */ React11.createElement("span", { className: "evalrep-meter-value" }, pct(clamped)));
 }
 function TrendSparkline({ history, threshold }) {
   const points = (history || []).map((r) => ({
@@ -1189,7 +1492,7 @@ function TrendSparkline({ history, threshold }) {
   const y = (s) => H - pad - s * (H - 2 * pad);
   const path = points.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.score).toFixed(1)}`).join(" ");
   const thr = Number.isFinite(threshold) ? y(threshold) : null;
-  return /* @__PURE__ */ React8.createElement("div", { className: "evalrep-trend" }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-trend-label" }, "score trend \xB7 ", n, " runs"), /* @__PURE__ */ React8.createElement(
+  return /* @__PURE__ */ React11.createElement("div", { className: "evalrep-trend" }, /* @__PURE__ */ React11.createElement("span", { className: "evalrep-trend-label" }, "score trend \xB7 ", n, " runs"), /* @__PURE__ */ React11.createElement(
     "svg",
     {
       className: "evalrep-trend-svg",
@@ -1200,7 +1503,7 @@ function TrendSparkline({ history, threshold }) {
       role: "img",
       "aria-label": "score trend across runs"
     },
-    thr != null && /* @__PURE__ */ React8.createElement(
+    thr != null && /* @__PURE__ */ React11.createElement(
       "line",
       {
         x1: 0,
@@ -1211,8 +1514,8 @@ function TrendSparkline({ history, threshold }) {
         strokeDasharray: "3 3"
       }
     ),
-    /* @__PURE__ */ React8.createElement("path", { d: path, className: "evalrep-trend-line", fill: "none" }),
-    points.map((p, i) => /* @__PURE__ */ React8.createElement(
+    /* @__PURE__ */ React11.createElement("path", { d: path, className: "evalrep-trend-line", fill: "none" }),
+    points.map((p, i) => /* @__PURE__ */ React11.createElement(
       "circle",
       {
         key: i,
@@ -1227,24 +1530,24 @@ function TrendSparkline({ history, threshold }) {
 function CaseRow({ c, dimKeys, open, onToggle, showTiming, showTarget }) {
   const errored = !!c.error;
   const byKey = new Map((c.dimensions || []).map((d) => [d.key, d]));
-  return /* @__PURE__ */ React8.createElement(React8.Fragment, null, /* @__PURE__ */ React8.createElement("tr", { className: `evalrep-case-row${errored ? " evalrep-case-errored" : ""}`, onClick: onToggle }, /* @__PURE__ */ React8.createElement("td", { className: "evalrep-case-toggle" }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-caret", style: { transform: open ? "rotate(90deg)" : "none" } }, /* @__PURE__ */ React8.createElement(Chevron2, null))), /* @__PURE__ */ React8.createElement("td", { className: "evalrep-case-id", title: c.case_id }, c.case_id), showTarget ? /* @__PURE__ */ React8.createElement("td", { className: "evalrep-case-target", title: c.target?.label }, c.target?.label || "\u2014") : null, dimKeys.map((k) => {
+  return /* @__PURE__ */ React11.createElement(React11.Fragment, null, /* @__PURE__ */ React11.createElement("tr", { className: `evalrep-case-row${errored ? " evalrep-case-errored" : ""}`, onClick: onToggle }, /* @__PURE__ */ React11.createElement("td", { className: "evalrep-case-toggle" }, /* @__PURE__ */ React11.createElement("span", { className: "evalrep-caret", style: { transform: open ? "rotate(90deg)" : "none" } }, /* @__PURE__ */ React11.createElement(Chevron3, null))), /* @__PURE__ */ React11.createElement("td", { className: "evalrep-case-id", title: c.case_id }, c.case_id), showTarget ? /* @__PURE__ */ React11.createElement("td", { className: "evalrep-case-target", title: c.target?.label }, c.target?.label || "\u2014") : null, dimKeys.map((k) => {
     const d = byKey.get(k);
-    return /* @__PURE__ */ React8.createElement("td", { key: k, className: "evalrep-case-dim" }, d ? /* @__PURE__ */ React8.createElement("span", { className: "evalrep-dimcell", title: `raw ${d.score}` }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-dimbar" }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-dimbar-fill", style: { width: `${Math.max(0, Math.min(1, d.normalized)) * 100}%` } })), /* @__PURE__ */ React8.createElement("span", { className: "evalrep-dimcell-val" }, pct(d.normalized))) : /* @__PURE__ */ React8.createElement("span", { className: "evalrep-muted" }, "\u2014"));
-  }), /* @__PURE__ */ React8.createElement("td", { className: "evalrep-case-score" }, errored ? /* @__PURE__ */ React8.createElement("span", { className: "evalrep-muted" }, "\u2014") : pct(c.case_score)), showTiming ? /* @__PURE__ */ React8.createElement("td", { className: "evalrep-case-time" }, elapsed(caseElapsedMs(c))) : null, /* @__PURE__ */ React8.createElement("td", { className: "evalrep-case-state" }, errored ? /* @__PURE__ */ React8.createElement("span", { className: "evalrep-chip evalrep-chip-error" }, "error") : /* @__PURE__ */ React8.createElement("span", { className: "evalrep-chip evalrep-chip-ok" }, "scored"))), open && /* @__PURE__ */ React8.createElement("tr", { className: "evalrep-case-detail-row" }, /* @__PURE__ */ React8.createElement("td", { colSpan: dimKeys.length + 4 + (showTiming ? 1 : 0) + (showTarget ? 1 : 0) }, /* @__PURE__ */ React8.createElement("div", { className: "evalrep-case-detail" }, errored && /* @__PURE__ */ React8.createElement("div", { className: "evalrep-error-note" }, c.error), /* @__PURE__ */ React8.createElement(DetailBlock, { label: "input", value: c.input }), /* @__PURE__ */ React8.createElement(DetailBlock, { label: "reference", value: c.reference }), /* @__PURE__ */ React8.createElement(DetailBlock, { label: "candidate output", value: c.output, truncated: c.output_truncated }), (c.dimensions || []).length > 0 && /* @__PURE__ */ React8.createElement("div", { className: "evalrep-rationales" }, c.dimensions.map((d) => /* @__PURE__ */ React8.createElement("div", { key: d.key, className: "evalrep-rationale" }, /* @__PURE__ */ React8.createElement("div", { className: "evalrep-rationale-head" }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-rationale-key" }, d.key), /* @__PURE__ */ React8.createElement("span", { className: "evalrep-rationale-score" }, d.score, " \xB7 ", pct(d.normalized))), /* @__PURE__ */ React8.createElement("div", { className: "evalrep-rationale-text" }, d.rationale))))))));
+    return /* @__PURE__ */ React11.createElement("td", { key: k, className: "evalrep-case-dim" }, d ? /* @__PURE__ */ React11.createElement("span", { className: "evalrep-dimcell", title: `raw ${d.score}` }, /* @__PURE__ */ React11.createElement("span", { className: "evalrep-dimbar" }, /* @__PURE__ */ React11.createElement("span", { className: "evalrep-dimbar-fill", style: { width: `${Math.max(0, Math.min(1, d.normalized)) * 100}%` } })), /* @__PURE__ */ React11.createElement("span", { className: "evalrep-dimcell-val" }, pct(d.normalized))) : /* @__PURE__ */ React11.createElement("span", { className: "evalrep-muted" }, "\u2014"));
+  }), /* @__PURE__ */ React11.createElement("td", { className: "evalrep-case-score" }, errored ? /* @__PURE__ */ React11.createElement("span", { className: "evalrep-muted" }, "\u2014") : pct(c.case_score)), showTiming ? /* @__PURE__ */ React11.createElement("td", { className: "evalrep-case-time" }, elapsed(caseElapsedMs(c))) : null, /* @__PURE__ */ React11.createElement("td", { className: "evalrep-case-state" }, errored ? /* @__PURE__ */ React11.createElement("span", { className: "evalrep-chip evalrep-chip-error" }, "error") : /* @__PURE__ */ React11.createElement("span", { className: "evalrep-chip evalrep-chip-ok" }, "scored"))), open && /* @__PURE__ */ React11.createElement("tr", { className: "evalrep-case-detail-row" }, /* @__PURE__ */ React11.createElement("td", { colSpan: dimKeys.length + 4 + (showTiming ? 1 : 0) + (showTarget ? 1 : 0) }, /* @__PURE__ */ React11.createElement("div", { className: "evalrep-case-detail" }, errored && /* @__PURE__ */ React11.createElement("div", { className: "evalrep-error-note" }, c.error), /* @__PURE__ */ React11.createElement(DetailBlock, { label: "input", value: c.input }), /* @__PURE__ */ React11.createElement(DetailBlock, { label: "reference", value: c.reference }), /* @__PURE__ */ React11.createElement(DetailBlock, { label: "candidate output", value: c.output, truncated: c.output_truncated }), (c.dimensions || []).length > 0 && /* @__PURE__ */ React11.createElement("div", { className: "evalrep-rationales" }, c.dimensions.map((d) => /* @__PURE__ */ React11.createElement("div", { key: d.key, className: "evalrep-rationale" }, /* @__PURE__ */ React11.createElement("div", { className: "evalrep-rationale-head" }, /* @__PURE__ */ React11.createElement("span", { className: "evalrep-rationale-key" }, d.key), /* @__PURE__ */ React11.createElement("span", { className: "evalrep-rationale-score" }, d.score, " \xB7 ", pct(d.normalized))), /* @__PURE__ */ React11.createElement("div", { className: "evalrep-rationale-text" }, d.rationale))))))));
 }
 function DetailBlock({ label, value, truncated }) {
   if (value == null || value === "") return null;
-  return /* @__PURE__ */ React8.createElement("div", { className: "evalrep-detail-block" }, /* @__PURE__ */ React8.createElement("div", { className: "evalrep-detail-label" }, label, truncated ? /* @__PURE__ */ React8.createElement("span", { className: "evalrep-muted" }, " \xB7 truncated") : null), /* @__PURE__ */ React8.createElement("pre", { className: "evalrep-pre" }, value));
+  return /* @__PURE__ */ React11.createElement("div", { className: "evalrep-detail-block" }, /* @__PURE__ */ React11.createElement("div", { className: "evalrep-detail-label" }, label, truncated ? /* @__PURE__ */ React11.createElement("span", { className: "evalrep-muted" }, " \xB7 truncated") : null), /* @__PURE__ */ React11.createElement("pre", { className: "evalrep-pre" }, value));
 }
 function EvalResultsView({ results, status, history, title, showTiming = true }) {
-  const [expanded, setExpanded] = useState2(() => /* @__PURE__ */ new Set());
+  const [expanded, setExpanded] = useState5(() => /* @__PURE__ */ new Set());
   const isTerminal = TERMINAL.has(status) || results && (results.error || results.aggregate);
   if (!results || !results.aggregate) {
     if (isTerminal && results && results.error) {
-      return /* @__PURE__ */ React8.createElement("div", { className: "evalrep" }, title ? /* @__PURE__ */ React8.createElement("div", { className: "evalrep-title" }, title) : null, /* @__PURE__ */ React8.createElement("div", { className: "evalrep-fatal" }, results.error));
+      return /* @__PURE__ */ React11.createElement("div", { className: "evalrep" }, title ? /* @__PURE__ */ React11.createElement("div", { className: "evalrep-title" }, title) : null, /* @__PURE__ */ React11.createElement("div", { className: "evalrep-fatal" }, results.error));
     }
     const s = status || "pending";
-    return /* @__PURE__ */ React8.createElement("div", { className: "evalrep" }, title ? /* @__PURE__ */ React8.createElement("div", { className: "evalrep-title" }, title) : null, /* @__PURE__ */ React8.createElement("div", { className: `evalrep-progress evalrep-progress-${statusTone(s)}` }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-spinner", "aria-hidden": "true" }), /* @__PURE__ */ React8.createElement("span", { className: "evalrep-progress-label" }, s === "running" ? "running evaluation\u2026" : "queued\u2026")));
+    return /* @__PURE__ */ React11.createElement("div", { className: "evalrep" }, title ? /* @__PURE__ */ React11.createElement("div", { className: "evalrep-title" }, title) : null, /* @__PURE__ */ React11.createElement("div", { className: `evalrep-progress evalrep-progress-${statusTone(s)}` }, /* @__PURE__ */ React11.createElement("span", { className: "evalrep-spinner", "aria-hidden": "true" }), /* @__PURE__ */ React11.createElement("span", { className: "evalrep-progress-label" }, s === "running" ? "running evaluation\u2026" : "queued\u2026")));
   }
   const agg = results.aggregate;
   const perDim = agg.per_dimension || {};
@@ -1259,19 +1562,19 @@ function EvalResultsView({ results, status, history, title, showTiming = true })
     else next.add(idx);
     return next;
   });
-  return /* @__PURE__ */ React8.createElement("div", { className: "evalrep" }, title ? /* @__PURE__ */ React8.createElement("div", { className: "evalrep-title" }, title) : null, fatal ? /* @__PURE__ */ React8.createElement("div", { className: "evalrep-fatal" }, fatal) : null, /* @__PURE__ */ React8.createElement("div", { className: `evalrep-verdict evalrep-verdict-${statusTone(runStatus)}` }, /* @__PURE__ */ React8.createElement("div", { className: "evalrep-verdict-main" }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-verdict-badge" }, isComparison ? "COMPARE" : runStatus === "passed" ? "PASS" : runStatus === "failed" ? "FAIL" : "ERROR"), /* @__PURE__ */ React8.createElement("span", { className: "evalrep-verdict-score" }, isComparison ? `${comparisonTargets.length} agents` : pct(agg.score)), /* @__PURE__ */ React8.createElement("span", { className: "evalrep-verdict-threshold" }, isComparison ? `${(results.cases || []).length} exact trajectories` : `vs ${pct(agg.pass_threshold)} threshold`)), !isComparison ? /* @__PURE__ */ React8.createElement("div", { className: "evalrep-verdict-gauge" }, /* @__PURE__ */ React8.createElement("span", { className: "evalrep-gauge-track" }, /* @__PURE__ */ React8.createElement(
+  return /* @__PURE__ */ React11.createElement("div", { className: "evalrep" }, title ? /* @__PURE__ */ React11.createElement("div", { className: "evalrep-title" }, title) : null, fatal ? /* @__PURE__ */ React11.createElement("div", { className: "evalrep-fatal" }, fatal) : null, /* @__PURE__ */ React11.createElement("div", { className: `evalrep-verdict evalrep-verdict-${statusTone(runStatus)}` }, /* @__PURE__ */ React11.createElement("div", { className: "evalrep-verdict-main" }, /* @__PURE__ */ React11.createElement("span", { className: "evalrep-verdict-badge" }, isComparison ? "COMPARE" : runStatus === "passed" ? "PASS" : runStatus === "failed" ? "FAIL" : "ERROR"), /* @__PURE__ */ React11.createElement("span", { className: "evalrep-verdict-score" }, isComparison ? `${comparisonTargets.length} agents` : pct(agg.score)), /* @__PURE__ */ React11.createElement("span", { className: "evalrep-verdict-threshold" }, isComparison ? `${(results.cases || []).length} exact trajectories` : `vs ${pct(agg.pass_threshold)} threshold`)), !isComparison ? /* @__PURE__ */ React11.createElement("div", { className: "evalrep-verdict-gauge" }, /* @__PURE__ */ React11.createElement("span", { className: "evalrep-gauge-track" }, /* @__PURE__ */ React11.createElement(
     "span",
     {
       className: `evalrep-gauge-fill evalrep-fill-${statusTone(runStatus)}`,
       style: { width: `${Math.max(0, Math.min(1, agg.score)) * 100}%` }
     }
-  ), /* @__PURE__ */ React8.createElement(
+  ), /* @__PURE__ */ React11.createElement(
     "span",
     {
       className: "evalrep-gauge-threshold",
       style: { left: `${Math.max(0, Math.min(1, agg.pass_threshold)) * 100}%` }
     }
-  ))) : null, /* @__PURE__ */ React8.createElement("div", { className: "evalrep-verdict-meta" }, /* @__PURE__ */ React8.createElement("span", null, agg.cases_total, " case", agg.cases_total === 1 ? "" : "s"), showTiming && results.duration_ms != null ? /* @__PURE__ */ React8.createElement("span", null, elapsed(results.duration_ms), " total") : null, agg.cases_errored > 0 ? /* @__PURE__ */ React8.createElement("span", { className: "evalrep-meta-error" }, agg.cases_errored, " errored") : null, results.judge_model ? /* @__PURE__ */ React8.createElement("span", { className: "evalrep-mono" }, "judge \xB7 ", results.judge_model) : null)), !isComparison ? /* @__PURE__ */ React8.createElement(TrendSparkline, { history, threshold: agg.pass_threshold }) : null, isComparison ? /* @__PURE__ */ React8.createElement("div", { className: "evalrep-targets", "aria-label": "Exact agent comparison" }, /* @__PURE__ */ React8.createElement("div", { className: "evalrep-section-label" }, "agents \xB7 exact totals"), /* @__PURE__ */ React8.createElement("div", { className: "evalrep-target-grid" }, comparisonTargets.map((target) => /* @__PURE__ */ React8.createElement("div", { className: "evalrep-target", key: target.target?.key || target.target?.label }, /* @__PURE__ */ React8.createElement("span", { title: target.target?.label }, target.target?.label || "agent"), /* @__PURE__ */ React8.createElement("strong", null, target.aggregate?.cases_total || 0, " test", target.aggregate?.cases_total === 1 ? "" : "s"), /* @__PURE__ */ React8.createElement("small", null, showTiming ? `${elapsed(targetElapsedMs(target, results.cases))} elapsed \xB7 ` : "", target.aggregate?.cases_total || 0, " case", target.aggregate?.cases_total === 1 ? "" : "s", " \xB7 ", target.aggregate?.cases_errored || 0, " error", target.aggregate?.cases_errored === 1 ? "" : "s"))))) : null, !isComparison && dimKeys.length > 0 && /* @__PURE__ */ React8.createElement("div", { className: "evalrep-dims" }, /* @__PURE__ */ React8.createElement("div", { className: "evalrep-section-label" }, "per-dimension mean"), dimKeys.map((k) => /* @__PURE__ */ React8.createElement(
+  ))) : null, /* @__PURE__ */ React11.createElement("div", { className: "evalrep-verdict-meta" }, /* @__PURE__ */ React11.createElement("span", null, agg.cases_total, " case", agg.cases_total === 1 ? "" : "s"), showTiming && results.duration_ms != null ? /* @__PURE__ */ React11.createElement("span", null, elapsed(results.duration_ms), " total") : null, agg.cases_errored > 0 ? /* @__PURE__ */ React11.createElement("span", { className: "evalrep-meta-error" }, agg.cases_errored, " errored") : null, results.judge_model ? /* @__PURE__ */ React11.createElement("span", { className: "evalrep-mono" }, "judge \xB7 ", results.judge_model) : null)), !isComparison ? /* @__PURE__ */ React11.createElement(TrendSparkline, { history, threshold: agg.pass_threshold }) : null, isComparison ? /* @__PURE__ */ React11.createElement("div", { className: "evalrep-targets", "aria-label": "Exact agent comparison" }, /* @__PURE__ */ React11.createElement("div", { className: "evalrep-section-label" }, "agents \xB7 exact totals"), /* @__PURE__ */ React11.createElement("div", { className: "evalrep-target-grid" }, comparisonTargets.map((target) => /* @__PURE__ */ React11.createElement("div", { className: "evalrep-target", key: target.target?.key || target.target?.label }, /* @__PURE__ */ React11.createElement("span", { title: target.target?.label }, target.target?.label || "agent"), /* @__PURE__ */ React11.createElement("strong", null, target.aggregate?.cases_total || 0, " test", target.aggregate?.cases_total === 1 ? "" : "s"), /* @__PURE__ */ React11.createElement("small", null, showTiming ? `${elapsed(targetElapsedMs(target, results.cases))} elapsed \xB7 ` : "", target.aggregate?.cases_total || 0, " case", target.aggregate?.cases_total === 1 ? "" : "s", " \xB7 ", target.aggregate?.cases_errored || 0, " error", target.aggregate?.cases_errored === 1 ? "" : "s"))))) : null, !isComparison && dimKeys.length > 0 && /* @__PURE__ */ React11.createElement("div", { className: "evalrep-dims" }, /* @__PURE__ */ React11.createElement("div", { className: "evalrep-section-label" }, "per-dimension mean"), dimKeys.map((k) => /* @__PURE__ */ React11.createElement(
     Meter,
     {
       key: k,
@@ -1280,7 +1583,7 @@ function EvalResultsView({ results, status, history, title, showTiming = true })
       tone: "accent",
       title: `${k}: ${pct(perDim[k]?.mean_normalized)}`
     }
-  ))), /* @__PURE__ */ React8.createElement("div", { className: "evalrep-cases" }, /* @__PURE__ */ React8.createElement("div", { className: "evalrep-section-label" }, isComparison ? "exact trajectories \xB7 no per-case averages" : "cases"), /* @__PURE__ */ React8.createElement("div", { className: "evalrep-table-wrap" }, /* @__PURE__ */ React8.createElement("table", { className: "evalrep-table" }, /* @__PURE__ */ React8.createElement("thead", null, /* @__PURE__ */ React8.createElement("tr", null, /* @__PURE__ */ React8.createElement("th", { "aria-label": "expand" }), /* @__PURE__ */ React8.createElement("th", null, "case"), isComparison ? /* @__PURE__ */ React8.createElement("th", null, "agent") : null, dimKeys.map((k) => /* @__PURE__ */ React8.createElement("th", { key: k, className: "evalrep-th-dim" }, k)), /* @__PURE__ */ React8.createElement("th", null, "score"), showTiming ? /* @__PURE__ */ React8.createElement("th", null, "time") : null, /* @__PURE__ */ React8.createElement("th", null, "state"))), /* @__PURE__ */ React8.createElement("tbody", null, (results.cases || []).map((c, i) => /* @__PURE__ */ React8.createElement(
+  ))), /* @__PURE__ */ React11.createElement("div", { className: "evalrep-cases" }, /* @__PURE__ */ React11.createElement("div", { className: "evalrep-section-label" }, isComparison ? "exact trajectories \xB7 no per-case averages" : "cases"), /* @__PURE__ */ React11.createElement("div", { className: "evalrep-table-wrap" }, /* @__PURE__ */ React11.createElement("table", { className: "evalrep-table" }, /* @__PURE__ */ React11.createElement("thead", null, /* @__PURE__ */ React11.createElement("tr", null, /* @__PURE__ */ React11.createElement("th", { "aria-label": "expand" }), /* @__PURE__ */ React11.createElement("th", null, "case"), isComparison ? /* @__PURE__ */ React11.createElement("th", null, "agent") : null, dimKeys.map((k) => /* @__PURE__ */ React11.createElement("th", { key: k, className: "evalrep-th-dim" }, k)), /* @__PURE__ */ React11.createElement("th", null, "score"), showTiming ? /* @__PURE__ */ React11.createElement("th", null, "time") : null, /* @__PURE__ */ React11.createElement("th", null, "state"))), /* @__PURE__ */ React11.createElement("tbody", null, (results.cases || []).map((c, i) => /* @__PURE__ */ React11.createElement(
     CaseRow,
     {
       key: `${c.target?.key || "case"}:${c.case_id || i}`,
@@ -1295,7 +1598,7 @@ function EvalResultsView({ results, status, history, title, showTiming = true })
 }
 
 // ui/EvalReportView.jsx
-import React9, { useState as useState3, useEffect as useEffect2, useRef as useRef2, useCallback } from "react";
+import React12, { useState as useState6, useEffect as useEffect4, useRef as useRef3, useCallback as useCallback2 } from "react";
 var TERMINAL2 = /* @__PURE__ */ new Set(["passed", "failed", "error"]);
 var POLL_MS = 2500;
 async function loadFromMindRoute2(reportPath) {
@@ -1311,16 +1614,16 @@ function normalize(doc) {
   return { status, results, history: doc.history };
 }
 function EvalReportView({ reportPath, fallback, load = loadFromMindRoute2, history }) {
-  const [state, setState] = useState3(null);
-  const [unavailable, setUnavailable] = useState3(false);
-  const timer = useRef2(null);
+  const [state, setState] = useState6(null);
+  const [unavailable, setUnavailable] = useState6(false);
+  const timer = useRef3(null);
   const clearTimer = () => {
     if (timer.current) {
       clearTimeout(timer.current);
       timer.current = null;
     }
   };
-  const fetchOnce = useCallback(async (cancelledRef) => {
+  const fetchOnce = useCallback2(async (cancelledRef) => {
     try {
       const doc = await Promise.resolve(load(reportPath));
       const norm = normalize(doc);
@@ -1334,7 +1637,7 @@ function EvalReportView({ reportPath, fallback, load = loadFromMindRoute2, histo
       if (!cancelledRef.cancelled) setUnavailable(true);
     }
   }, [load, reportPath]);
-  useEffect2(() => {
+  useEffect4(() => {
     const cancelledRef = { cancelled: false };
     setState(null);
     setUnavailable(false);
@@ -1346,9 +1649,9 @@ function EvalReportView({ reportPath, fallback, load = loadFromMindRoute2, histo
   }, [fetchOnce]);
   if (unavailable) return fallback;
   if (!state) {
-    return /* @__PURE__ */ React9.createElement("div", { className: "evalrep" }, /* @__PURE__ */ React9.createElement("div", { className: "evalrep-progress evalrep-progress-pending" }, /* @__PURE__ */ React9.createElement("span", { className: "evalrep-spinner", "aria-hidden": "true" }), /* @__PURE__ */ React9.createElement("span", { className: "evalrep-progress-label" }, "loading eval\u2026")));
+    return /* @__PURE__ */ React12.createElement("div", { className: "evalrep" }, /* @__PURE__ */ React12.createElement("div", { className: "evalrep-progress evalrep-progress-pending" }, /* @__PURE__ */ React12.createElement("span", { className: "evalrep-spinner", "aria-hidden": "true" }), /* @__PURE__ */ React12.createElement("span", { className: "evalrep-progress-label" }, "loading eval\u2026")));
   }
-  return /* @__PURE__ */ React9.createElement(
+  return /* @__PURE__ */ React12.createElement(
     EvalResultsView,
     {
       results: state.results,
@@ -1359,7 +1662,7 @@ function EvalReportView({ reportPath, fallback, load = loadFromMindRoute2, histo
 }
 
 // ui/SubscriptionConnectModal.jsx
-import React10 from "react";
+import React13 from "react";
 var SUBSCRIPTION_CONNECT_PROVIDERS = Object.freeze({
   codex: Object.freeze({
     id: "codex",
@@ -1385,17 +1688,17 @@ function SubscriptionConnectModal({
   onClose,
   subjectLabel = "this agent"
 }) {
-  const [auth, setAuth] = React10.useState(initial || {});
-  const [copied, setCopied] = React10.useState(false);
-  const [code, setCode] = React10.useState("");
-  const [submitting, setSubmitting] = React10.useState(false);
-  const getStatusRef = React10.useRef(getStatus);
-  const completeAuthRef = React10.useRef(completeAuth);
-  const onConnectedRef = React10.useRef(onConnected);
+  const [auth, setAuth] = React13.useState(initial || {});
+  const [copied, setCopied] = React13.useState(false);
+  const [code, setCode] = React13.useState("");
+  const [submitting, setSubmitting] = React13.useState(false);
+  const getStatusRef = React13.useRef(getStatus);
+  const completeAuthRef = React13.useRef(completeAuth);
+  const onConnectedRef = React13.useRef(onConnected);
   getStatusRef.current = getStatus;
   completeAuthRef.current = completeAuth;
   onConnectedRef.current = onConnected;
-  React10.useEffect(() => {
+  React13.useEffect(() => {
     let alive = true;
     let completed = false;
     const poll = async () => {
@@ -1446,7 +1749,7 @@ function SubscriptionConnectModal({
   };
   const signInUrl = auth.auth_url || auth.verification_uri;
   const isFailed = auth.state === "failed" || auth.state === "unavailable";
-  return /* @__PURE__ */ React10.createElement(
+  return /* @__PURE__ */ React13.createElement(
     Modal,
     {
       className: `modal subscription-connect subscription-connect-${subscription.tone}`,
@@ -1454,8 +1757,8 @@ function SubscriptionConnectModal({
       label: `Connect ${subscription.service} subscription`,
       onClose
     },
-    /* @__PURE__ */ React10.createElement("div", { className: "subscription-connect-head" }, /* @__PURE__ */ React10.createElement("div", { className: "subscription-connect-brand" }, /* @__PURE__ */ React10.createElement("span", { className: `subscription-backend-badge subscription-backend-badge-${subscription.tone}` }, /* @__PURE__ */ React10.createElement("span", { className: "subscription-backend-mark", "aria-hidden": "true" }), subscription.badge), /* @__PURE__ */ React10.createElement("span", null, "Subscription access")), /* @__PURE__ */ React10.createElement("button", { type: "button", className: "subscription-connect-close", onClick: onClose, "aria-label": "Close" }, "\xD7")),
-    /* @__PURE__ */ React10.createElement("div", { className: "subscription-connect-body" }, /* @__PURE__ */ React10.createElement("div", { className: "subscription-connect-kicker" }, "Native provider"), /* @__PURE__ */ React10.createElement("h2", null, "Connect ", subscription.service), /* @__PURE__ */ React10.createElement("p", { className: "subscription-connect-lede" }, "Sign in once, then use your ", subscription.service, " plan directly from ", subjectLabel, "."), /* @__PURE__ */ React10.createElement("div", { className: "subscription-privacy" }, /* @__PURE__ */ React10.createElement("span", { className: "subscription-privacy-mark", "aria-hidden": "true" }, "\u2713"), /* @__PURE__ */ React10.createElement("div", null, /* @__PURE__ */ React10.createElement("strong", null, "Credentials stay in Swarm."), /* @__PURE__ */ React10.createElement("span", null, subjectLabel, " receives only an instance-bound proxy token."))), signInUrl ? /* @__PURE__ */ React10.createElement("div", { className: "subscription-connect-flow" }, /* @__PURE__ */ React10.createElement("div", { className: "subscription-step" }, /* @__PURE__ */ React10.createElement("span", { className: "subscription-step-number" }, "1"), /* @__PURE__ */ React10.createElement("div", null, /* @__PURE__ */ React10.createElement("strong", null, "Open ", subscription.service), /* @__PURE__ */ React10.createElement("span", null, "Approve access in a secure provider window.")), /* @__PURE__ */ React10.createElement("a", { className: "subscription-connect-action subscription-connect-primary", href: signInUrl, target: "_blank", rel: "noreferrer" }, "Open sign-in ", /* @__PURE__ */ React10.createElement("span", { "aria-hidden": "true" }, "\u2197"))), subscription.flow === "device" && auth.user_code ? /* @__PURE__ */ React10.createElement("div", { className: "subscription-step" }, /* @__PURE__ */ React10.createElement("span", { className: "subscription-step-number" }, "2"), /* @__PURE__ */ React10.createElement("div", null, /* @__PURE__ */ React10.createElement("strong", null, "Enter this code"), /* @__PURE__ */ React10.createElement("span", null, "The window will ask for it.")), /* @__PURE__ */ React10.createElement("button", { type: "button", className: "subscription-device-code", onClick: copyCode, "aria-label": "Copy device code" }, /* @__PURE__ */ React10.createElement("span", { className: "subscription-code-value" }, auth.user_code), /* @__PURE__ */ React10.createElement("span", null, copied ? "Copied" : "Copy"))) : null, subscription.flow === "code" ? /* @__PURE__ */ React10.createElement("form", { className: "subscription-step subscription-code-step", onSubmit: complete }, /* @__PURE__ */ React10.createElement("span", { className: "subscription-step-number" }, "2"), /* @__PURE__ */ React10.createElement("label", null, /* @__PURE__ */ React10.createElement("strong", null, "Paste the returned code"), /* @__PURE__ */ React10.createElement("span", null, "Copy the complete code from Claude after approval."), /* @__PURE__ */ React10.createElement(
+    /* @__PURE__ */ React13.createElement("div", { className: "subscription-connect-head" }, /* @__PURE__ */ React13.createElement("div", { className: "subscription-connect-brand" }, /* @__PURE__ */ React13.createElement("span", { className: `subscription-backend-badge subscription-backend-badge-${subscription.tone}` }, /* @__PURE__ */ React13.createElement("span", { className: "subscription-backend-mark", "aria-hidden": "true" }), subscription.badge), /* @__PURE__ */ React13.createElement("span", null, "Subscription access")), /* @__PURE__ */ React13.createElement("button", { type: "button", className: "subscription-connect-close", onClick: onClose, "aria-label": "Close" }, "\xD7")),
+    /* @__PURE__ */ React13.createElement("div", { className: "subscription-connect-body" }, /* @__PURE__ */ React13.createElement("div", { className: "subscription-connect-kicker" }, "Native provider"), /* @__PURE__ */ React13.createElement("h2", null, "Connect ", subscription.service), /* @__PURE__ */ React13.createElement("p", { className: "subscription-connect-lede" }, "Sign in once, then use your ", subscription.service, " plan directly from ", subjectLabel, "."), /* @__PURE__ */ React13.createElement("div", { className: "subscription-privacy" }, /* @__PURE__ */ React13.createElement("span", { className: "subscription-privacy-mark", "aria-hidden": "true" }, "\u2713"), /* @__PURE__ */ React13.createElement("div", null, /* @__PURE__ */ React13.createElement("strong", null, "Credentials stay in Swarm."), /* @__PURE__ */ React13.createElement("span", null, subjectLabel, " receives only an instance-bound proxy token."))), signInUrl ? /* @__PURE__ */ React13.createElement("div", { className: "subscription-connect-flow" }, /* @__PURE__ */ React13.createElement("div", { className: "subscription-step" }, /* @__PURE__ */ React13.createElement("span", { className: "subscription-step-number" }, "1"), /* @__PURE__ */ React13.createElement("div", null, /* @__PURE__ */ React13.createElement("strong", null, "Open ", subscription.service), /* @__PURE__ */ React13.createElement("span", null, "Approve access in a secure provider window.")), /* @__PURE__ */ React13.createElement("a", { className: "subscription-connect-action subscription-connect-primary", href: signInUrl, target: "_blank", rel: "noreferrer" }, "Open sign-in ", /* @__PURE__ */ React13.createElement("span", { "aria-hidden": "true" }, "\u2197"))), subscription.flow === "device" && auth.user_code ? /* @__PURE__ */ React13.createElement("div", { className: "subscription-step" }, /* @__PURE__ */ React13.createElement("span", { className: "subscription-step-number" }, "2"), /* @__PURE__ */ React13.createElement("div", null, /* @__PURE__ */ React13.createElement("strong", null, "Enter this code"), /* @__PURE__ */ React13.createElement("span", null, "The window will ask for it.")), /* @__PURE__ */ React13.createElement("button", { type: "button", className: "subscription-device-code", onClick: copyCode, "aria-label": "Copy device code" }, /* @__PURE__ */ React13.createElement("span", { className: "subscription-code-value" }, auth.user_code), /* @__PURE__ */ React13.createElement("span", null, copied ? "Copied" : "Copy"))) : null, subscription.flow === "code" ? /* @__PURE__ */ React13.createElement("form", { className: "subscription-step subscription-code-step", onSubmit: complete }, /* @__PURE__ */ React13.createElement("span", { className: "subscription-step-number" }, "2"), /* @__PURE__ */ React13.createElement("label", null, /* @__PURE__ */ React13.createElement("strong", null, "Paste the returned code"), /* @__PURE__ */ React13.createElement("span", null, "Copy the complete code from Claude after approval."), /* @__PURE__ */ React13.createElement(
       "input",
       {
         value: code,
@@ -1464,46 +1767,48 @@ function SubscriptionConnectModal({
         spellCheck: "false",
         placeholder: "Authorization code"
       }
-    )), /* @__PURE__ */ React10.createElement("button", { type: "submit", className: "subscription-connect-action subscription-connect-primary", disabled: !code.trim() || submitting }, submitting ? "Connecting\u2026" : "Connect")) : null) : isFailed ? /* @__PURE__ */ React10.createElement("p", { className: "subscription-connect-error" }, auth.error || `${subscription.service} sign-in could not start.`) : /* @__PURE__ */ React10.createElement("div", { className: "subscription-starting" }, /* @__PURE__ */ React10.createElement("span", null), "Preparing secure sign-in\u2026"), auth.error && !isFailed ? /* @__PURE__ */ React10.createElement("p", { className: "subscription-connect-error" }, auth.error) : null)
+    )), /* @__PURE__ */ React13.createElement("button", { type: "submit", className: "subscription-connect-action subscription-connect-primary", disabled: !code.trim() || submitting }, submitting ? "Connecting\u2026" : "Connect")) : null) : isFailed ? /* @__PURE__ */ React13.createElement("p", { className: "subscription-connect-error" }, auth.error || `${subscription.service} sign-in could not start.`) : /* @__PURE__ */ React13.createElement("div", { className: "subscription-starting" }, /* @__PURE__ */ React13.createElement("span", null), "Preparing secure sign-in\u2026"), auth.error && !isFailed ? /* @__PURE__ */ React13.createElement("p", { className: "subscription-connect-error" }, auth.error) : null)
   );
 }
 
 // ui/GatewayPrimitives.jsx
-import React11 from "react";
+import React14 from "react";
 function PageHeader({ eyebrow, title, description, actions, children, className = "" }) {
-  return /* @__PURE__ */ React11.createElement("header", { className: `gateway-page-header ${className}`.trim() }, /* @__PURE__ */ React11.createElement("div", { className: "gateway-page-heading" }, eyebrow ? /* @__PURE__ */ React11.createElement("div", { className: "gateway-page-eyebrow" }, eyebrow) : null, /* @__PURE__ */ React11.createElement("h1", null, title), description ? /* @__PURE__ */ React11.createElement("p", null, description) : null), actions ? /* @__PURE__ */ React11.createElement("div", { className: "gateway-page-actions" }, actions) : null, children);
+  return /* @__PURE__ */ React14.createElement("header", { className: `gateway-page-header ${className}`.trim() }, /* @__PURE__ */ React14.createElement("div", { className: "gateway-page-heading" }, eyebrow ? /* @__PURE__ */ React14.createElement("div", { className: "gateway-page-eyebrow" }, eyebrow) : null, /* @__PURE__ */ React14.createElement("h1", null, title), description ? /* @__PURE__ */ React14.createElement("p", null, description) : null), actions ? /* @__PURE__ */ React14.createElement("div", { className: "gateway-page-actions" }, actions) : null, children);
 }
 function MetricGrid({ children, className = "" }) {
-  return /* @__PURE__ */ React11.createElement("div", { className: `gateway-metric-grid ${className}`.trim() }, children);
+  return /* @__PURE__ */ React14.createElement("div", { className: `gateway-metric-grid ${className}`.trim() }, children);
 }
 function MetricCard({ label, value, detail, tone = "neutral", trend, className = "" }) {
-  return /* @__PURE__ */ React11.createElement("article", { className: `gateway-metric gateway-tone-${tone} ${className}`.trim() }, /* @__PURE__ */ React11.createElement("div", { className: "gateway-metric-label" }, label), /* @__PURE__ */ React11.createElement("div", { className: "gateway-metric-row" }, /* @__PURE__ */ React11.createElement("strong", null, value), trend ? /* @__PURE__ */ React11.createElement("span", { className: "gateway-metric-trend" }, trend) : null), detail ? /* @__PURE__ */ React11.createElement("div", { className: "gateway-metric-detail" }, detail) : null);
+  return /* @__PURE__ */ React14.createElement("article", { className: `gateway-metric gateway-tone-${tone} ${className}`.trim() }, /* @__PURE__ */ React14.createElement("div", { className: "gateway-metric-label" }, label), /* @__PURE__ */ React14.createElement("div", { className: "gateway-metric-row" }, /* @__PURE__ */ React14.createElement("strong", null, value), trend ? /* @__PURE__ */ React14.createElement("span", { className: "gateway-metric-trend" }, trend) : null), detail ? /* @__PURE__ */ React14.createElement("div", { className: "gateway-metric-detail" }, detail) : null);
 }
 function StatusBadge({ children, tone = "neutral", pulse = false, className = "" }) {
-  return /* @__PURE__ */ React11.createElement("span", { className: `gateway-status gateway-tone-${tone} ${pulse ? "gateway-status-pulse" : ""} ${className}`.trim() }, /* @__PURE__ */ React11.createElement("span", { className: "gateway-status-dot", "aria-hidden": "true" }), children);
+  return /* @__PURE__ */ React14.createElement("span", { className: `gateway-status gateway-tone-${tone} ${pulse ? "gateway-status-pulse" : ""} ${className}`.trim() }, /* @__PURE__ */ React14.createElement("span", { className: "gateway-status-dot", "aria-hidden": "true" }), children);
 }
 function Toolbar({ children, className = "", "aria-label": ariaLabel = "Filters" }) {
-  return /* @__PURE__ */ React11.createElement("div", { className: `gateway-toolbar ${className}`.trim(), role: "search", "aria-label": ariaLabel }, children);
+  return /* @__PURE__ */ React14.createElement("div", { className: `gateway-toolbar ${className}`.trim(), role: "search", "aria-label": ariaLabel }, children);
 }
 function DataTable({ columns, rows, rowKey = "id", empty = null, onRowClick, className = "" }) {
   if (!rows.length && empty) return empty;
-  return /* @__PURE__ */ React11.createElement("div", { className: `gateway-table-wrap ${className}`.trim() }, /* @__PURE__ */ React11.createElement("table", { className: "gateway-table" }, /* @__PURE__ */ React11.createElement("thead", null, /* @__PURE__ */ React11.createElement("tr", null, columns.map((column) => /* @__PURE__ */ React11.createElement("th", { key: column.key }, column.label)))), /* @__PURE__ */ React11.createElement("tbody", null, rows.map((row2, index) => {
+  return /* @__PURE__ */ React14.createElement("div", { className: `gateway-table-wrap ${className}`.trim() }, /* @__PURE__ */ React14.createElement("table", { className: "gateway-table" }, /* @__PURE__ */ React14.createElement("thead", null, /* @__PURE__ */ React14.createElement("tr", null, columns.map((column) => /* @__PURE__ */ React14.createElement("th", { key: column.key }, column.label)))), /* @__PURE__ */ React14.createElement("tbody", null, rows.map((row2, index) => {
     const key = typeof rowKey === "function" ? rowKey(row2, index) : row2[rowKey] ?? index;
-    return /* @__PURE__ */ React11.createElement("tr", { key, onClick: onRowClick ? () => onRowClick(row2) : void 0, className: onRowClick ? "gateway-row-action" : "" }, columns.map((column) => /* @__PURE__ */ React11.createElement("td", { key: column.key, "data-label": column.label }, column.render ? column.render(row2[column.key], row2) : row2[column.key])));
+    return /* @__PURE__ */ React14.createElement("tr", { key, onClick: onRowClick ? () => onRowClick(row2) : void 0, className: onRowClick ? "gateway-row-action" : "" }, columns.map((column) => /* @__PURE__ */ React14.createElement("td", { key: column.key, "data-label": column.label }, column.render ? column.render(row2[column.key], row2) : row2[column.key])));
   }))));
 }
 function DetailList({ items, className = "" }) {
-  return /* @__PURE__ */ React11.createElement("dl", { className: `gateway-detail-list ${className}`.trim() }, items.map((item) => /* @__PURE__ */ React11.createElement("div", { className: "gateway-detail-row", key: item.label }, /* @__PURE__ */ React11.createElement("dt", null, item.label), /* @__PURE__ */ React11.createElement("dd", null, item.value ?? "\u2014"))));
+  return /* @__PURE__ */ React14.createElement("dl", { className: `gateway-detail-list ${className}`.trim() }, items.map((item) => /* @__PURE__ */ React14.createElement("div", { className: "gateway-detail-row", key: item.label }, /* @__PURE__ */ React14.createElement("dt", null, item.label), /* @__PURE__ */ React14.createElement("dd", null, item.value ?? "\u2014"))));
 }
 function JsonCodeBlock({ value, label = "JSON", copyLabel = "Copy", className = "" }) {
-  const [copied, setCopied] = React11.useState(false);
+  const [state, setState] = React14.useState("");
+  const code = React14.useRef(null);
   const text2 = typeof value === "string" ? value : JSON.stringify(value, null, 2);
   async function copy() {
-    await copyToClipboard(text2);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
+    const result = await copyText(text2, code.current);
+    setState(result);
+    if (result !== "selected") window.setTimeout(() => setState(""), 1500);
   }
-  return /* @__PURE__ */ React11.createElement("section", { className: `gateway-code ${className}`.trim() }, /* @__PURE__ */ React11.createElement("div", { className: "gateway-code-head" }, /* @__PURE__ */ React11.createElement("span", null, label), /* @__PURE__ */ React11.createElement("button", { type: "button", onClick: copy }, copied ? "Copied" : copyLabel)), /* @__PURE__ */ React11.createElement("pre", null, /* @__PURE__ */ React11.createElement("code", null, text2)));
+  const shown = state === "copied" ? "Copied" : state === "selected" ? "Selected \xB7 press \u2318C" : state === "failed" ? "Copy failed" : copyLabel;
+  return /* @__PURE__ */ React14.createElement("section", { className: `gateway-code ${className}`.trim() }, /* @__PURE__ */ React14.createElement("div", { className: "gateway-code-head" }, /* @__PURE__ */ React14.createElement("span", null, label), /* @__PURE__ */ React14.createElement("button", { type: "button", onClick: copy }, shown)), /* @__PURE__ */ React14.createElement("pre", null, /* @__PURE__ */ React14.createElement("code", { ref: code }, text2)));
 }
 export {
   Combobox,
@@ -1525,30 +1830,51 @@ export {
   MetricCard,
   MetricGrid,
   Modal,
+  PAGE_SIZES,
   PageHeader,
+  Pager,
+  SORT_DIRECTION,
+  SORT_NATURAL,
   SUBSCRIPTION_CONNECT_PROVIDERS,
   SecurityReportView,
+  SegmentedControl,
+  SortGlyph,
+  SortPicker,
+  SortPill,
+  SortTh,
   StatusBadge,
   SubscriptionConnectModal,
   MODES as THEME_MODES,
   Toolbar,
   base64url,
+  copyFetched,
+  copyText,
   copyToClipboard,
+  createBuildWatcher,
   createStore,
   createThemeController,
   createUseAppState,
   deepFreeze,
   downloadBlob,
+  firstDesc,
   formatBalance,
   formatBytes,
   formatCount,
   formatDuration,
   formatTokens,
   formatUsd,
+  parseSort,
   pkceChallenge,
   randomString,
   setBrandMarkVariant,
+  sortParam,
+  sortRows,
+  sortWays,
   useBrandMarkVariant,
   useConfirm,
-  useEscapeKey
+  useDebounced,
+  useEscapeKey,
+  usePageSize,
+  useSorter,
+  useStored
 };

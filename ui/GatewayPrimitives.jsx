@@ -1,5 +1,5 @@
 import React from 'react';
-import { copyToClipboard } from './clipboard.js';
+import { copyText } from './clipboard.js';
 
 export function PageHeader({ eyebrow, title, description, actions, children, className = '' }) {
   return <header className={`gateway-page-header ${className}`.trim()}><div className="gateway-page-heading">{eyebrow ? <div className="gateway-page-eyebrow">{eyebrow}</div> : null}<h1>{title}</h1>{description ? <p>{description}</p> : null}</div>{actions ? <div className="gateway-page-actions">{actions}</div> : null}{children}</header>;
@@ -30,9 +30,14 @@ export function DetailList({ items, className = '' }) {
   return <dl className={`gateway-detail-list ${className}`.trim()}>{items.map(item => <div className="gateway-detail-row" key={item.label}><dt>{item.label}</dt><dd>{item.value ?? '—'}</dd></div>)}</dl>;
 }
 
+// Copy says what happened: "Copied", or — where the browser refuses the
+// clipboard (plain-http hosts, denied permission) — the text is selected
+// for a manual ⌘C, or "Copy failed".
 export function JsonCodeBlock({ value, label = 'JSON', copyLabel = 'Copy', className = '' }) {
-  const [copied, setCopied] = React.useState(false);
+  const [state, setState] = React.useState('');
+  const code = React.useRef(null);
   const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
-  async function copy() { await copyToClipboard(text); setCopied(true); window.setTimeout(() => setCopied(false), 1200); }
-  return <section className={`gateway-code ${className}`.trim()}><div className="gateway-code-head"><span>{label}</span><button type="button" onClick={copy}>{copied ? 'Copied' : copyLabel}</button></div><pre><code>{text}</code></pre></section>;
+  async function copy() { const result = await copyText(text, code.current); setState(result); if (result !== 'selected') window.setTimeout(() => setState(''), 1500); }
+  const shown = state === 'copied' ? 'Copied' : state === 'selected' ? 'Selected · press ⌘C' : state === 'failed' ? 'Copy failed' : copyLabel;
+  return <section className={`gateway-code ${className}`.trim()}><div className="gateway-code-head"><span>{label}</span><button type="button" onClick={copy}>{shown}</button></div><pre><code ref={code}>{text}</code></pre></section>;
 }

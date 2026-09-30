@@ -32,7 +32,21 @@ export {
   formatBytes,
   formatDuration,
 } from './format.js';
-export { copyToClipboard } from './clipboard.js';
+export { copyToClipboard, copyText, copyFetched } from './clipboard.js';
+export { createBuildWatcher } from './buildWatch.js';
+export { useStored, useDebounced } from './useStored.js';
+export { SegmentedControl } from './SegmentedControl.jsx';
+export { Pager, PAGE_SIZES, usePageSize } from './Pager.jsx';
+export {
+  SORT_NATURAL,
+  SORT_DIRECTION,
+  firstDesc,
+  parseSort,
+  sortParam,
+  sortWays,
+  sortRows,
+} from './sort.js';
+export { useSorter, SortTh, SortPill, SortPicker, SortGlyph } from './Sorting.jsx';
 export { createThemeController, MODES as THEME_MODES } from './theme.js';
 export { SecurityReportView } from './SecurityReportView.jsx';
 export { EvalResultsView } from './EvalResultsView.jsx';

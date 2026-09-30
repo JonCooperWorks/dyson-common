@@ -71,6 +71,21 @@ live here so the two apps look and behave the same instead of drifting.
 - `ui/GatewayPrimitives.jsx` — page headers, metrics, status badges, filter
   toolbars, responsive data tables, detail lists, and JSON inspectors for
   inference and observability products.
+- `ui/Sorting.jsx`, `ui/sort.js` — sortable table heads that order the whole
+  list (`useSorter` over one `sort=` string, `-col` for descending;
+  `<SortTh>` with a menu for columns with several keys, `<SortPill>`,
+  a phone `<SortPicker>`), and `sortRows` for lists sorted in the browser.
+- `ui/Pager.jsx`, `ui/SegmentedControl.jsx` — one paging control for
+  server- and client-paged lists (page jump, unknown end, rows-per-page kept
+  per browser via `usePageSize`) and the segmented choice it uses.
+- `ui/clipboard.js` — `copyText` answers copied / selected (for a manual ⌘C
+  where the browser refuses) / failed; `copyFetched` copies text still being
+  fetched without losing the click's user activation (Safari).
+- `ui/buildWatch.js` + `dyson-common-ui/vite` — stale-tab detection: the
+  build stamps an id into the bundle and `version.json`; `createBuildWatcher`
+  polls it so an app can reload a tab left open across a deploy.
+- `ui/useStored.js` — `useStored` (a localStorage-backed state that survives
+  blocked storage) and `useDebounced`.
 - `ui/tokens.css` — the canonical design tokens (colors, fonts, radius).
 - `ui/components.css` — styles for the shared primitives.
 
@@ -86,13 +101,23 @@ npm install && npm run build && npm test
 
 ```jsonc
 // package.json of each web app — pin to a tag, like the Rust dep
-"dyson-common-ui": "git+ssh://git@github.com/JonCooperWorks/dyson-common.git#ui-v0.1.12"
+"dyson-common-ui": "git+ssh://git@github.com/JonCooperWorks/dyson-common.git#ui-v0.1.19"
 ```
 
 ```js
 import { Modal, Combobox, useEscapeKey } from 'dyson-common-ui';
 import 'dyson-common-ui/tokens.css';      // canonical tokens (the shared look)
 import 'dyson-common-ui/components.css';   // <Modal>/<Combobox> styles
+```
+
+Shared component classes are prefixed `dc-` (`dc-pager`, `dc-seg`,
+`dc-sort-*`) so they never collide with an app's own.
+
+```js
+// vite.config.js — stamp a build id for createBuildWatcher
+import { buildIdPlugin } from 'dyson-common-ui/vite';
+const buildId = buildIdPlugin();
+export default defineConfig({ plugins: [react(), buildId.plugin], define: buildId.define });
 ```
 
 Each consumer's Vite config sets `resolve.dedupe: ['react','react-dom']`

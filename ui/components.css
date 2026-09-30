@@ -786,3 +786,76 @@
 .evalrep-rationale-key { font-weight: 650; font-size: 12px; }
 .evalrep-rationale-score { font-variant-numeric: tabular-nums; font-size: 11.5px; color: var(--fg-muted); }
 .evalrep-rationale-text { font-size: 12px; line-height: 1.55; color: var(--fg-muted); white-space: pre-wrap; }
+
+/* ── <SegmentedControl> ───────────────────────────────────────── */
+.dc-seg { display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--border); border-radius: calc(var(--radius) + 2px); background: var(--bg); }
+.dc-seg button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--fg-muted); padding: 4px 10px; border-radius: var(--radius); font: inherit; font-weight: 500; font-size: 12.5px; cursor: pointer; }
+.dc-seg button:hover { color: var(--fg); }
+.dc-seg button.active { background: var(--bg-1); color: var(--fg); box-shadow: var(--shadow-1), inset 0 0 0 1px var(--border); }
+.dc-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ── <Pager> ──────────────────────────────────────────────────── */
+.dc-pager { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 8px 14px; border-top: 1px solid var(--border); color: var(--fg-muted); font-size: 12px; }
+.dc-pager-range { margin-right: auto; font-variant-numeric: tabular-nums; }
+.dc-pager-note { color: var(--fg-faint); }
+.dc-pager-steps { display: inline-flex; align-items: center; gap: 2px; }
+.dc-pager-btn { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--fg-muted); cursor: pointer; }
+.dc-pager-btn:hover:not(:disabled) { background: var(--bg-2); color: var(--fg); }
+.dc-pager-btn:disabled { opacity: .4; cursor: not-allowed; }
+.dc-pager-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.dc-pager-at { display: inline-flex; align-items: center; gap: 6px; margin: 0 6px; white-space: nowrap; }
+.dc-pager-at input { width: 56px; height: 26px; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--fg); font: inherit; text-align: center; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+.dc-pager-at input:focus { outline: 0; border-color: var(--accent); }
+.dc-pager-at input::-webkit-outer-spin-button, .dc-pager-at input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.dc-pager-size { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-faint); }
+.dc-pager-size .dc-seg { padding: 2px; }
+.dc-pager-size .dc-seg button { padding: 2px 8px; font-size: 11.5px; }
+@media (max-width: 640px) {
+  .dc-pager { justify-content: center; }
+  .dc-pager-range { margin-right: 0; width: 100%; text-align: center; }
+}
+
+/* ── Sorting: <SortTh>, its menu, <SortPill>, <SortPicker> ────── */
+th.dc-sortable { padding: 0; }
+.dc-sort-head { display: flex; align-items: stretch; }
+.dc-sort-btn { display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 8px 6px 8px 12px; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; transition: color .12s; }
+.dc-sort-btn:hover { color: var(--fg-muted); }
+.dc-sort-btn:focus-visible, .dc-sort-more:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; border-radius: 6px; }
+.dc-sort-label { overflow: hidden; text-overflow: ellipsis; }
+.dc-sort-aside { color: var(--accent); }
+.dc-sort-glyph { flex: none; opacity: 0; transition: opacity .12s; }
+.dc-sort-glyph path { fill: currentColor; opacity: .35; transition: opacity .12s, fill .12s; }
+.dc-sort-btn:hover .dc-sort-glyph, .dc-sort-btn:focus-visible .dc-sort-glyph { opacity: 1; }
+.dc-sort-glyph.asc, .dc-sort-glyph.desc { opacity: 1; }
+.dc-sort-glyph.asc .up, .dc-sort-glyph.desc .down { opacity: 1; fill: var(--accent); }
+.dc-sort-glyph.asc .down, .dc-sort-glyph.desc .up { opacity: .18; }
+.dc-sort-more { display: grid; place-items: center; flex: none; width: 20px; margin: 5px 4px 5px -2px; border: 0; border-radius: 6px; background: none; color: var(--fg-faint); cursor: pointer; }
+.dc-sort-more:hover, .dc-sort-more[aria-expanded="true"] { background: var(--bg-2); color: var(--fg); }
+.dc-sort-menu { position: fixed; z-index: 60; width: 232px; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-1); box-shadow: var(--shadow-2, 0 12px 32px rgb(0 0 0 / .18)); animation: dc-sort-in .12s ease-out; }
+@keyframes dc-sort-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.dc-sort-menu-head { padding: 4px 8px 6px; color: var(--fg-faint); font: 700 9.5px/1.3 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.dc-sort-menu-row { display: grid; gap: 4px; padding: 6px 8px; border-radius: 8px; }
+.dc-sort-menu-row + .dc-sort-menu-row { border-top: 1px solid var(--border); border-radius: 0; }
+.dc-sort-menu-label { color: var(--fg); font-size: 12.5px; font-weight: 500; }
+.dc-sort-menu-ways { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.dc-sort-menu-ways button { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: none; color: var(--fg-muted); font-size: 11.5px; white-space: nowrap; cursor: pointer; }
+.dc-sort-menu-ways button .dc-sort-glyph { opacity: 1; }
+.dc-sort-menu-ways button:hover, .dc-sort-menu-ways button:focus-visible { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); color: var(--fg); outline: none; }
+.dc-sort-menu-ways button.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--fg); }
+.dc-sort-menu-reset { display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 4px; padding: 7px 8px; border: 0; border-top: 1px solid var(--border); background: none; color: var(--fg-muted); font-size: 12px; cursor: pointer; }
+.dc-sort-menu-reset:hover { color: var(--accent); }
+.dc-sort-pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 8px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); border-radius: 999px; background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--fg-muted); font-size: 11.5px; white-space: nowrap; }
+.dc-sort-pill b { color: var(--fg); font-weight: 600; }
+.dc-sort-pill .dc-sort-glyph { opacity: 1; }
+.dc-sort-pill button { display: grid; place-items: center; width: 18px; height: 18px; border: 0; border-radius: 50%; background: none; color: var(--fg-faint); cursor: pointer; }
+.dc-sort-pill button:hover { background: var(--bg-2); color: var(--fg); }
+.dc-sort-picker { display: none; }
+.dc-sort-picker-box { flex: 1; min-width: 0; font: 400 12.5px var(--sans); text-transform: none; }
+.dc-sort-picker.always { display: flex; align-items: center; gap: 8px; color: var(--fg-faint); font: 700 9.5px/1.6 var(--mono); text-transform: uppercase; }
+.dc-sort-picker.always .dc-sort-picker-box { flex: 0 1 220px; min-width: 170px; }
+@media (max-width: 640px) {
+  .dc-sort-picker { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--fg-faint); font: 700 9.5px/1.6 var(--mono); text-transform: uppercase; }
+  .dc-sort-picker.always { padding: 0; border: 0; }
+  .dc-sort-picker.always .dc-sort-picker-box { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .dc-sort-menu { animation: none; } }
