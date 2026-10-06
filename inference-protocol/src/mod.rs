@@ -35,8 +35,8 @@ use serde_json::Value;
 pub mod model_routing;
 mod surface;
 pub use surface::{
-    InferenceOperation, InferenceRoute, classify_route, dialect_for_path, qualify_model,
-    supported_routes,
+    InferenceOperation, InferenceRoute, classify_route, dialect_for_path, is_bedrock_model,
+    qualify_model, supported_routes,
 };
 
 pub mod anthropic;
@@ -53,6 +53,8 @@ pub enum Dialect {
     Anthropic,
     /// OpenAI Responses (`POST /v1/responses`).
     Responses,
+    /// OpenAI Chat Completions fronting Amazon Bedrock (no AWS wire protocol).
+    BedrockGateway,
 }
 
 impl Dialect {
@@ -63,6 +65,7 @@ impl Dialect {
         match self {
             Dialect::Anthropic => anthropic::translate_request(body),
             Dialect::Responses => responses::translate_request(body),
+            Dialect::BedrockGateway => Ok(body.clone()),
         }
     }
 
@@ -78,6 +81,7 @@ impl Dialect {
     /// them. `Kind` is the neutral middle the callers speak.
     pub fn error_type(self, kind: ErrorKind) -> &'static str {
         match (self, kind) {
+            (Dialect::BedrockGateway, _) => kind.openai_type(),
             (Dialect::Anthropic, ErrorKind::RateLimit) => "rate_limit_error",
             (Dialect::Responses, ErrorKind::RateLimit) => "rate_limit_exceeded",
             (Dialect::Anthropic, ErrorKind::Permission) => "permission_error",
@@ -157,7 +161,8 @@ pub fn error_body_with_code(
             "error": {"message": message, "type": kind.openai_type()},
         }),
     };
-    if let Some(code) = code
+    if dialect != Some(Dialect::BedrockGateway)
+        && let Some(code) = code
         && let Some(err) = body.get_mut("error").and_then(Value::as_object_mut)
     {
         err.insert("code".to_owned(), Value::String(code.to_owned()));
@@ -169,6 +174,13 @@ pub fn error_body_with_code(
 /// `{"type":"error", ...}`; Responses/OpenAI use a bare `{"error": {...}}`.
 fn error_envelope(dialect: Dialect, kind: &str, message: &str) -> Value {
     match dialect {
+        // aws-samples/bedrock-access-gateway@144c4bcb866d247dc1cef5b7c5d4cbea8bc7d633:
+        // src/api/auth.py raises HTTPException(401, detail="Invalid API Key");
+        // src/api/models/bedrock.py does the same for validation (400),
+        // throttling (429) and other invocation errors (500). FastAPI renders
+        // these as {"detail": str(e)}; app.py installs no HTTPException handler.
+        // https://github.com/aws-samples/bedrock-access-gateway/blob/144c4bcb866d247dc1cef5b7c5d4cbea8bc7d633/src/api/models/bedrock.py#L359-L369
+        Dialect::BedrockGateway => serde_json::json!({"detail": message}),
         Dialect::Anthropic => serde_json::json!({
             "type": "error",
             "error": {"type": kind, "message": message},
@@ -193,7 +205,11 @@ fn error_envelope(dialect: Dialect, kind: &str, message: &str) -> Value {
 pub fn sanitize_upstream_error(dialect: Option<Dialect>, status: u16, raw: &[u8]) -> Vec<u8> {
     let value: Value = serde_json::from_slice(raw).unwrap_or(Value::Null);
     let (_, message) = extract_openai_error(&value);
-    error_body(dialect, upstream_error_kind(status), &message)
+    let message = value
+        .get("detail")
+        .and_then(Value::as_str)
+        .unwrap_or(&message);
+    error_body(dialect, upstream_error_kind(status), message)
         .to_string()
         .into_bytes()
 }
@@ -242,10 +258,13 @@ impl ResponseTranslator {
         let tool_names = responses::ToolNames::from_request(request);
         let encoder: Box<dyn Encoder> = if !(200..300).contains(&status) {
             Box::new(ErrorEncoder::new(Some(dialect), status))
+        } else if dialect == Dialect::BedrockGateway {
+            Box::new(PassthroughEncoder)
         } else if streaming {
             match dialect {
                 Dialect::Anthropic => Box::new(AnthropicStreamEncoder::new(model)),
                 Dialect::Responses => Box::new(ResponsesStreamEncoder::new(model, tool_names)),
+                Dialect::BedrockGateway => unreachable!("handled above"),
             }
         } else {
             Box::new(CompletionEncoder::new(dialect, tool_names))
@@ -279,6 +298,17 @@ impl ResponseTranslator {
 trait Encoder: Send {
     fn feed(&mut self, chunk: &[u8]) -> Vec<u8>;
     fn finish(&mut self) -> Vec<u8>;
+}
+
+struct PassthroughEncoder;
+
+impl Encoder for PassthroughEncoder {
+    fn feed(&mut self, chunk: &[u8]) -> Vec<u8> {
+        chunk.to_vec()
+    }
+    fn finish(&mut self) -> Vec<u8> {
+        Vec::new()
+    }
 }
 
 struct AnthropicStreamEncoder {
@@ -410,6 +440,7 @@ impl Encoder for CompletionEncoder {
             }
         }
         let out = match self.dialect {
+            Dialect::BedrockGateway => value,
             Dialect::Anthropic => anthropic::completion_to_json(&completion),
             Dialect::Responses => {
                 responses::completion_to_json_with_tools(&completion, &self.tool_names)
@@ -851,5 +882,81 @@ mod tests {
         assert_eq!(value["type"], "error");
         assert_eq!(value["error"]["type"], "invalid_request_error");
         assert_eq!(value["error"]["message"], "bad model");
+    }
+}
+
+#[cfg(test)]
+mod bedrock_tests {
+    use super::*;
+
+    #[test]
+    fn gateway_is_openai_with_fastapi_errors() {
+        let body = serde_json::json!({"model":"us.anthropic.claude-3-5-sonnet-20241022-v2:0", "messages":[], "stream":true});
+        assert_eq!(
+            Dialect::BedrockGateway.translate_request(&body).unwrap(),
+            body
+        );
+        for kind in [
+            ErrorKind::Authentication,
+            ErrorKind::Permission,
+            ErrorKind::RateLimit,
+            ErrorKind::InvalidRequest,
+            ErrorKind::NotFound,
+            ErrorKind::Billing,
+            ErrorKind::Upstream,
+        ] {
+            assert_eq!(
+                error_body_with_code(
+                    Some(Dialect::BedrockGateway),
+                    kind,
+                    Some("ignored"),
+                    "message"
+                ),
+                serde_json::json!({"detail":"message"})
+            );
+        }
+        assert_eq!(
+            serde_json::from_slice::<Value>(&sanitize_upstream_error(
+                Some(Dialect::BedrockGateway),
+                500,
+                br#"{"detail":"denied","user_id":"secret"}"#
+            ))
+            .unwrap(),
+            serde_json::json!({"detail":"denied"})
+        );
+    }
+
+    #[tokio::test]
+    async fn gateway_preserves_success_bytes_including_sse() {
+        use futures::StreamExt;
+        for streaming in [false, true] {
+            let bytes = if streaming {
+                b"data: {\"model\":\"amazon.nova-lite-v1:0\"}\n\ndata: [DONE]\n\n".to_vec()
+            } else {
+                br#"{"id":"chatcmpl-1","model":"amazon.nova-lite-v1:0","choices":[]}"#.to_vec()
+            };
+            let source = futures::stream::iter([
+                Ok(Bytes::from(bytes[..8].to_vec())),
+                Ok(Bytes::from(bytes[8..].to_vec())),
+            ]);
+            let chunks: Vec<_> = TranslatingStream::new(
+                source,
+                ResponseTranslator::build(
+                    Dialect::BedrockGateway,
+                    streaming,
+                    200,
+                    "amazon.nova-lite-v1:0",
+                ),
+            )
+            .collect()
+            .await;
+            assert_eq!(
+                chunks
+                    .into_iter()
+                    .flat_map(|c| c.unwrap())
+                    .collect::<Vec<_>>(),
+                bytes
+            );
+        }
     }
 }
