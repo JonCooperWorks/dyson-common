@@ -33,5 +33,24 @@ oauth-client = ["dep:reqwest", "dep:base64", "dep:rand", "dep:sha2"]
 oidc = ["dep:jsonwebtoken"]
 
 [workspace]
-members = ["telegram", "inference-protocol"]
+members = ["telegram", "inference-protocol", "secrets", "traces"]
 resolver = "2"
+
+# Kingfisher (dyson-secrets' `kingfisher` feature) builds against its vendored
+# Vectorscan; a dependency's own [patch] is ignored, so it is repeated here
+# and must be repeated by every workspace that enables that feature.
+[patch.crates-io]
+vectorscan-rs = { git = "https://github.com/mongodb/kingfisher", tag = "v2.7.0" }
+vectorscan-rs-sys = { git = "https://github.com/mongodb/kingfisher", tag = "v2.7.0" }
+
+# Compiling Kingfisher's rules takes minutes unoptimised.
+[profile.dev.package.vectorscan-rs-sys]
+opt-level = 3
+[profile.dev.package.vectorscan-rs]
+opt-level = 3
+[profile.dev.package.kingfisher-rules]
+opt-level = 3
+[profile.dev.package.kingfisher-scanner]
+opt-level = 3
+[profile.dev.package.kingfisher-core]
+opt-level = 3

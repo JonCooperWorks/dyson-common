@@ -54,6 +54,55 @@ dyson-common = { git = "https://github.com/JonCooperWorks/dyson-common", tag = "
 Pin to a tag or `rev`, never a bare branch. Bumping a contract: tag here, bump
 the tag in both repos, run both test suites.
 
+### Secrets (`dyson-secrets`)
+
+Detection and redaction of secrets in agent traffic, logs and traces. Each
+detector is a feature, so a consumer that only redacts builds none of them.
+Nothing here ever presents a found key to its issuer.
+
+| Feature | What |
+|---|---|
+| *(none)* | `redact`: take known values out of text and JSON however they are written (as is, JSON-escaped once or twice, percent-encoded, inside base64 at any alignment), as `[REDACTED:<rule>:<digest>]`; `scrub` a document until a rescan finds nothing more, or hold it back with the reason |
+| `kingfisher` | `Scanner`: MongoDB's Kingfisher with its built-in rules plus Betterleaks' generic API-key and password rules; each `Hit` carries its line/column, the lines around it, the variable it is assigned to, and its paired components (an AWS key id's secret key) |
+| `payment` | card numbers (brand, Luhn, issuer from a compiled-in BIN table) and IBANs |
+| `external` | Betterleaks, TruffleHog (no verification) and Nosey Parker run as programs over a batch of texts, merged into `Scanner::scan_at` |
+| `utoipa` | `ToSchema` on the serialized types |
+
+```toml
+dyson-secrets = { git = "https://github.com/JonCooperWorks/dyson-common", tag = "…" }                             # redaction only
+dyson-secrets = { git = "https://github.com/JonCooperWorks/dyson-common", tag = "…", features = ["kingfisher", "payment"] }
+```
+
+```rust
+let scanner = dyson_secrets::Scanner::shared()?;          // compiles the rules once
+let outcome = dyson_secrets::scrub(&mut document, &known, 3, |doc| {
+    scanner.leftovers(doc, hmac_key, |hit| !marked_false_positive(hit))
+})?;
+```
+
+`kingfisher` builds Kingfisher's vendored Vectorscan, and a dependency's own
+`[patch]` is ignored: a workspace that enables it repeats the
+`[patch.crates-io]` for `vectorscan-rs`/`vectorscan-rs-sys` from this repo's
+`Cargo.toml` (and, for tolerable test times, its `opt-level = 3` dev
+profiles).
+
+Third-party data: Betterleaks' generic rules (MIT, `secrets/rules/`) and the
+BIN List Data (CC BY 4.0, `secrets/data/README.md`).
+
+### Traces (`dyson-traces`)
+
+Agent conversations as Hugging Face **Session Traces**, the JSON Lines
+format the HF trace viewer reads: a `session` header line, then a `message`
+line a message (`role`, `content`, `reasoningContent`, `toolCalls`,
+`toolCallId`, `timestamp`, `model`). `Session::to_jsonl` / `from_jsonl`,
+`object_key` (`<prefix>/YYYY/MM/DD/<id>.jsonl`), and `sigv4` (AWS Signature
+V4 as plain functions). The `bucket` feature adds a `Sink` trait and an
+S3-gateway `Bucket` client; `Destination::hugging_face("<owner>/<name>", …)`
+targets HF Storage Buckets at `https://s3.hf.co`.
+
+A `Session` is plain serde data: redact it with `dyson-secrets` before it
+is put (`to_value` → `scrub` → `from_value`).
+
 ## SSRF
 
 The OAuth flow client takes no internal-host policy of its own — every networked

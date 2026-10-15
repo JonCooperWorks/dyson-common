@@ -1,0 +1,23 @@
+[package]
+name = "dyson-traces"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Agent conversations as Hugging Face Session Traces (JSONL), and an S3-gateway bucket to publish them to."
+repository = "https://github.com/JonCooperWorks/dyson-common"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+hex = "0.4"
+hmac = "0.12"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+# `bucket`: the HTTP client that puts session files in a bucket.
+async-trait = { version = "0.1", optional = true }
+reqwest = { version = "0.13", optional = true, default-features = false, features = ["rustls"] }
+
+[features]
+default = []
+bucket = ["dep:async-trait", "dep:reqwest"]
