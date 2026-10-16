@@ -32,12 +32,11 @@ pub(crate) fn translate_request(body: &Value) -> Result<Value, String> {
     let mut messages: Vec<Value> = Vec::new();
 
     // `system` → a leading OpenAI system message (string or text-block array).
-    if let Some(system) = obj.get("system") {
-        if let Some(text) = system_text(system)
-            && !text.is_empty()
-        {
-            messages.push(serde_json::json!({"role": "system", "content": text}));
-        }
+    if let Some(system) = obj.get("system")
+        && let Some(text) = system_text(system)
+        && !text.is_empty()
+    {
+        messages.push(serde_json::json!({"role": "system", "content": text}));
     }
 
     let anthropic_messages = obj
