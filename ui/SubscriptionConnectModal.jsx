@@ -9,6 +9,14 @@ export const SUBSCRIPTION_CONNECT_PROVIDERS = Object.freeze({
   claude: Object.freeze({
     id: 'claude', badge: 'Claude', service: 'Claude', tone: 'claude', flow: 'code',
   }),
+  // DeepSeek's account sign-in returns the browser to a loopback address
+  // that does not load; the code travels in that address.
+  deepseek: Object.freeze({
+    id: 'deepseek', badge: 'DeepSeek', service: 'DeepSeek', tone: 'deepseek', flow: 'code',
+    codeLabel: 'Paste the address you land on',
+    codeHint: 'Copy the full 127.0.0.1 address from the browser after approval.',
+    codePlaceholder: 'http://127.0.0.1:…/oauth/callback?code=…',
+  }),
 });
 
 /**
@@ -16,7 +24,8 @@ export const SUBSCRIPTION_CONNECT_PROVIDERS = Object.freeze({
  *
  * OAuth credentials never pass through this component. `initial` and
  * `getStatus` receive only the broker's safe status projection; `completeAuth`
- * submits Claude's one-time authorization code directly to that broker.
+ * submits the one-time authorization code (Claude) or callback address
+ * (DeepSeek) directly to that broker.
  */
 export function SubscriptionConnectModal({
   initial,
@@ -155,14 +164,14 @@ export function SubscriptionConnectModal({
               <form className="subscription-step subscription-code-step" onSubmit={complete}>
                 <span className="subscription-step-number">2</span>
                 <label>
-                  <strong>Paste the returned code</strong>
-                  <span>Copy the complete code from Claude after approval.</span>
+                  <strong>{subscription.codeLabel || 'Paste the returned code'}</strong>
+                  <span>{subscription.codeHint || `Copy the complete code from ${subscription.service} after approval.`}</span>
                   <input
                     value={code}
                     onChange={event => setCode(event.target.value)}
                     autoComplete="off"
                     spellCheck="false"
-                    placeholder="Authorization code"
+                    placeholder={subscription.codePlaceholder || 'Authorization code'}
                   />
                 </label>
                 <button type="submit" className="subscription-connect-action subscription-connect-primary" disabled={!code.trim() || submitting}>

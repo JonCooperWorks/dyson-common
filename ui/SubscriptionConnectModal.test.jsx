@@ -52,4 +52,24 @@ describe('SubscriptionConnectModal', () => {
     await waitFor(() => expect(completeAuth).toHaveBeenCalledWith('code#state'));
     expect(onConnected).toHaveBeenCalledTimes(1);
   });
+
+  test('asks DeepSeek users for the callback address they land on', async () => {
+    const completeAuth = vi.fn().mockResolvedValue({ state: 'connected', connected: true });
+    render(
+      <SubscriptionConnectModal
+        initial={{ state: 'pending', connected: false, auth_url: 'https://platform.deepseek.com/dsh/authorize?x=1' }}
+        subscription={SUBSCRIPTION_CONNECT_PROVIDERS.deepseek}
+        getStatus={vi.fn().mockResolvedValue(null)}
+        completeAuth={completeAuth}
+        onConnected={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('dialog', { name: 'Connect DeepSeek subscription' })).toBeInTheDocument();
+    expect(screen.getByText('Paste the address you land on')).toBeInTheDocument();
+    const url = 'http://127.0.0.1:3080/oauth/callback?code=c&state=s';
+    fireEvent.change(screen.getByPlaceholderText(/127\.0\.0\.1/), { target: { value: url } });
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await waitFor(() => expect(completeAuth).toHaveBeenCalledWith(url));
+  });
 });

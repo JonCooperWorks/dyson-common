@@ -109,6 +109,10 @@
   --subscription-tone: var(--sub, #d97757);
   --subscription-tone-wash: color-mix(in srgb, var(--sub, #d97757) 8%, var(--bg-2));
 }
+.modal.subscription-connect-deepseek {
+  --subscription-tone: #5786fe;
+  --subscription-tone-wash: color-mix(in srgb, #5786fe 8%, var(--bg-2));
+}
 .subscription-connect-head {
   height: 54px;
   padding: 0 18px;
