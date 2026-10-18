@@ -13,6 +13,8 @@ use crate::sigv4::{self, Credentials};
 pub const HF_ENDPOINT: &str = "https://s3.hf.co";
 /// The region HF's gateway signs for.
 pub const HF_REGION: &str = "us-east-1";
+/// The most of one file [`Sink::get`] reads.
+pub const GET_MOST: usize = 32 * 1024 * 1024;
 
 /// Why a file could not be put, or the bucket not reached.
 #[derive(Debug)]
@@ -32,6 +34,12 @@ pub trait Sink: Send + Sync {
     async fn put(&self, key: &str, body: Vec<u8>) -> Result<(), Error>;
     /// Gone already is not an error.
     async fn delete(&self, key: &str) -> Result<(), Error>;
+    /// A file read back, `None` when there is none. A sink that cannot
+    /// read says so.
+    async fn get(&self, key: &str) -> Result<Option<Vec<u8>>, Error> {
+        let _ = key;
+        Err(Error(format!("{} cannot read files back", self.describe())))
+    }
     /// Where this is, for an operator to read.
     fn describe(&self) -> String;
 }
@@ -118,7 +126,14 @@ impl Bucket {
             .map_err(|_| Error(format!("no URL for {key}")))
     }
 
-    async fn send(&self, method: reqwest::Method, key: &str, body: Vec<u8>) -> Result<(), Error> {
+    /// One signed request. The body of a successful GET comes back; a
+    /// GET or DELETE of nothing is `None`.
+    async fn send(
+        &self,
+        method: reqwest::Method,
+        key: &str,
+        body: Vec<u8>,
+    ) -> Result<Option<Vec<u8>>, Error> {
         let url = self.url(key)?;
         let host = match url.port() {
             Some(port) => format!("{}:{port}", url.host_str().unwrap_or_default()),
@@ -141,13 +156,36 @@ impl Bucket {
                 .header("content-type", "application/x-ndjson")
                 .body(body);
         }
-        let response = request
+        let mut response = request
             .send()
             .await
             .map_err(|e| Error(format!("reach the bucket: {e}")))?;
         let status = response.status();
-        if status.is_success() || (method == reqwest::Method::DELETE && status.as_u16() == 404) {
-            return Ok(());
+        if status.as_u16() == 404 && method != reqwest::Method::PUT {
+            return Ok(None);
+        }
+        if status.is_success() {
+            if method != reqwest::Method::GET {
+                return Ok(Some(Vec::new()));
+            }
+            if response
+                .content_length()
+                .is_some_and(|n| n > GET_MOST as u64)
+            {
+                return Err(Error(format!("{key} is larger than {GET_MOST} bytes")));
+            }
+            let mut out = Vec::new();
+            while let Some(chunk) = response
+                .chunk()
+                .await
+                .map_err(|e| Error(format!("read {key}: {e}")))?
+            {
+                if out.len() + chunk.len() > GET_MOST {
+                    return Err(Error(format!("{key} is larger than {GET_MOST} bytes")));
+                }
+                out.extend_from_slice(&chunk);
+            }
+            return Ok(Some(out));
         }
         let said: String = response
             .text()
@@ -165,11 +203,17 @@ impl Bucket {
 #[async_trait]
 impl Sink for Bucket {
     async fn put(&self, key: &str, body: Vec<u8>) -> Result<(), Error> {
-        self.send(reqwest::Method::PUT, key, body).await
+        self.send(reqwest::Method::PUT, key, body).await.map(drop)
     }
 
     async fn delete(&self, key: &str) -> Result<(), Error> {
-        self.send(reqwest::Method::DELETE, key, Vec::new()).await
+        self.send(reqwest::Method::DELETE, key, Vec::new())
+            .await
+            .map(drop)
+    }
+
+    async fn get(&self, key: &str) -> Result<Option<Vec<u8>>, Error> {
+        self.send(reqwest::Method::GET, key, Vec::new()).await
     }
 
     fn describe(&self) -> String {
