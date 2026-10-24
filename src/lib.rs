@@ -41,6 +41,7 @@ pub mod net;
 pub mod oauth;
 #[cfg(feature = "oidc")]
 pub mod oidc;
+pub mod security_tester;
 pub mod state_sync;
 pub mod telegram_media;
 pub mod tokens;
