@@ -13,6 +13,18 @@ pub const HARNESS_PROFILE: &str = "byo:glitch";
 pub const MODEL_ROUTE: &str = "swarm-cyber";
 pub const CONTROL_MEDIA_TYPE: &str = "application/vnd.security-tester.control.v1+json";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HarnessProfile {
+    #[serde(rename = "byo:glitch")]
+    Glitch,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ModelRoute {
+    #[serde(rename = "swarm-cyber")]
+    SwarmCyber,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConfigureRequest {
@@ -21,8 +33,8 @@ pub struct ConfigureRequest {
     pub tenant_id: String,
     pub workload_identity: String,
     pub recorder_identity: String,
-    pub harness_profile: String,
-    pub model_route: String,
+    pub harness_profile: HarnessProfile,
+    pub model_route: ModelRoute,
     pub mcp_route: String,
     pub public_recorder_ca_sha256: String,
     pub compiled_scope_version_id: Option<String>,
@@ -131,8 +143,8 @@ mod tests {
             tenant_id: "tenant".into(),
             workload_identity: "workload".into(),
             recorder_identity: "recorder".into(),
-            harness_profile: HARNESS_PROFILE.into(),
-            model_route: MODEL_ROUTE.into(),
+            harness_profile: HarnessProfile::Glitch,
+            model_route: ModelRoute::SwarmCyber,
             mcp_route: "mcp-route".into(),
             public_recorder_ca_sha256: "00".repeat(32),
             compiled_scope_version_id: None,
@@ -159,5 +171,15 @@ mod tests {
     fn glitch_profile_and_model_are_single_fixed_contract_values() {
         assert_eq!(HARNESS_PROFILE, "byo:glitch");
         assert_eq!(MODEL_ROUTE, "swarm-cyber");
+        assert_eq!(
+            serde_json::to_string(&HarnessProfile::Glitch).unwrap(),
+            r#""byo:glitch""#
+        );
+        assert_eq!(
+            serde_json::to_string(&ModelRoute::SwarmCyber).unwrap(),
+            r#""swarm-cyber""#
+        );
+        assert!(serde_json::from_str::<HarnessProfile>(r#""byo:other""#).is_err());
+        assert!(serde_json::from_str::<ModelRoute>(r#""other-model""#).is_err());
     }
 }
