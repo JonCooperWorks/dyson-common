@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 pub const API_VERSION: u16 = 1;
 pub const INSTANCE_KIND: &str = "security-tester.v1";
 pub const CAPABILITY_FLAG: &str = "security_tester_v1";
+pub const HARNESS_PROFILE: &str = "byo:glitch";
+pub const MODEL_ROUTE: &str = "swarm-cyber";
 pub const CONTROL_MEDIA_TYPE: &str = "application/vnd.security-tester.control.v1+json";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -19,6 +21,7 @@ pub struct ConfigureRequest {
     pub tenant_id: String,
     pub workload_identity: String,
     pub recorder_identity: String,
+    pub harness_profile: String,
     pub model_route: String,
     pub mcp_route: String,
     pub public_recorder_ca_sha256: String,
@@ -128,7 +131,8 @@ mod tests {
             tenant_id: "tenant".into(),
             workload_identity: "workload".into(),
             recorder_identity: "recorder".into(),
-            model_route: "model-route".into(),
+            harness_profile: HARNESS_PROFILE.into(),
+            model_route: MODEL_ROUTE.into(),
             mcp_route: "mcp-route".into(),
             public_recorder_ca_sha256: "00".repeat(32),
             compiled_scope_version_id: None,
@@ -147,7 +151,13 @@ mod tests {
 
     #[test]
     fn unknown_fields_fail_closed() {
-        let value = r#"{"api_version":1,"instance_id":"i","tenant_id":"t","workload_identity":"w","recorder_identity":"r","model_route":"m","mcp_route":"p","public_recorder_ca_sha256":"h","compiled_scope_version_id":null,"compiled_scope_sha256":null,"expires_unix_ms":1,"provider_key":"secret"}"#;
+        let value = r#"{"api_version":1,"instance_id":"i","tenant_id":"t","workload_identity":"w","recorder_identity":"r","harness_profile":"byo:glitch","model_route":"swarm-cyber","mcp_route":"p","public_recorder_ca_sha256":"h","compiled_scope_version_id":null,"compiled_scope_sha256":null,"expires_unix_ms":1,"provider_key":"secret"}"#;
         assert!(serde_json::from_str::<ConfigureRequest>(value).is_err());
+    }
+
+    #[test]
+    fn glitch_profile_and_model_are_single_fixed_contract_values() {
+        assert_eq!(HARNESS_PROFILE, "byo:glitch");
+        assert_eq!(MODEL_ROUTE, "swarm-cyber");
     }
 }
