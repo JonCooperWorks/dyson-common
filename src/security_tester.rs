@@ -103,19 +103,35 @@ pub struct ActionResponse {
 #[serde(deny_unknown_fields)]
 pub struct SnapshotRequest {
     pub api_version: u16,
-    pub snapshot_id: String,
-    pub destination_ref: String,
-    pub deadline_unix_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SnapshotResponse {
     pub api_version: u16,
-    pub snapshot_id: String,
-    pub logical_schema_version: u32,
+    pub envelope: SnapshotEnvelope,
+}
+
+/// Authenticated product-owned snapshot data returned to the trusted control
+/// plane for storage. The logical payload stays opaque to Swarm; its schema is
+/// versioned and validated by the product during restore.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SnapshotEnvelope {
     pub sha256: String,
-    pub bytes: u64,
+    pub key_id: String,
+    pub source_instance_id: String,
+    pub source_tenant_id: String,
+    pub generation: u64,
+    pub hmac_sha256: String,
+    pub snapshot: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RestoreRequest {
+    pub api_version: u16,
+    pub envelope: SnapshotEnvelope,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -181,5 +197,49 @@ mod tests {
         );
         assert!(serde_json::from_str::<HarnessProfile>(r#""byo:other""#).is_err());
         assert!(serde_json::from_str::<ModelRoute>(r#""other-model""#).is_err());
+    }
+
+    #[test]
+    fn snapshot_contract_keeps_storage_destination_out_of_guest_request() {
+        let request = serde_json::to_value(SnapshotRequest {
+            api_version: API_VERSION,
+        })
+        .unwrap();
+        assert_eq!(request, serde_json::json!({"api_version": API_VERSION}));
+
+        let envelope = SnapshotEnvelope {
+            sha256: "00".repeat(32),
+            key_id: "snapshot-key-v1".into(),
+            source_instance_id: "instance".into(),
+            source_tenant_id: "tenant".into(),
+            generation: 1,
+            hmac_sha256: "11".repeat(32),
+            snapshot: serde_json::json!({"schema_version": 4}),
+        };
+        let response = SnapshotResponse {
+            api_version: API_VERSION,
+            envelope: envelope.clone(),
+        };
+        assert_eq!(
+            serde_json::from_value::<SnapshotResponse>(serde_json::to_value(&response).unwrap())
+                .unwrap(),
+            response
+        );
+        assert_eq!(
+            serde_json::from_value::<RestoreRequest>(
+                serde_json::to_value(RestoreRequest {
+                    api_version: API_VERSION,
+                    envelope,
+                })
+                .unwrap()
+            )
+            .unwrap()
+            .api_version,
+            API_VERSION
+        );
+        let json = serde_json::to_string(&request).unwrap();
+        for forbidden in ["destination", "credential", "bucket", "object_store"] {
+            assert!(!json.contains(forbidden));
+        }
     }
 }
