@@ -145,6 +145,24 @@ pub struct InstanceStatus {
     pub runnable_intents: u32,
     pub budget_stop: bool,
     pub expires_unix_ms: u64,
+    /// What this Glitch build says it is. Absent from releases that predate
+    /// self-reporting, so Swarm must treat `None` as "unknown", never as a
+    /// match.
+    #[serde(default)]
+    pub release: Option<ReleaseIdentity>,
+}
+
+/// A Glitch build's self-reported identity. `version` and `commit` are baked
+/// in at image build time. An image cannot contain its own content digest, so
+/// `image_digest` is the digest the control plane rendered into the workload
+/// (`GLITCH_IMAGE_DIGEST`) echoed back; the control plane cross-checks it
+/// against the kubelet-reported image ID rather than trusting it alone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReleaseIdentity {
+    pub version: String,
+    pub commit: String,
+    pub image_digest: Option<String>,
 }
 
 #[cfg(test)]
@@ -175,6 +193,20 @@ mod tests {
         for forbidden in ["credential", "private_key", "target_secret", "provider_key"] {
             assert!(!json.contains(forbidden));
         }
+    }
+
+    #[test]
+    fn status_release_is_optional_and_closed() {
+        let old = r#"{"api_version":1,"instance_id":"i","state":"observe_ready","active_engagements":0,"pending_approvals":0,"runnable_intents":0,"budget_stop":false,"expires_unix_ms":1}"#;
+        assert_eq!(
+            serde_json::from_str::<InstanceStatus>(old).unwrap().release,
+            None
+        );
+        let new = r#"{"api_version":1,"instance_id":"i","state":"observe_ready","active_engagements":0,"pending_approvals":0,"runnable_intents":0,"budget_stop":false,"expires_unix_ms":1,"release":{"version":"0.1.0","commit":"abc1234","image_digest":"sha256:00"}}"#;
+        let status = serde_json::from_str::<InstanceStatus>(new).unwrap();
+        assert_eq!(status.release.unwrap().commit, "abc1234");
+        let extra = r#"{"api_version":1,"instance_id":"i","state":"observe_ready","active_engagements":0,"pending_approvals":0,"runnable_intents":0,"budget_stop":false,"expires_unix_ms":1,"release":{"version":"0.1.0","commit":"abc1234","image_digest":null,"signed":true}}"#;
+        assert!(serde_json::from_str::<InstanceStatus>(extra).is_err());
     }
 
     #[test]

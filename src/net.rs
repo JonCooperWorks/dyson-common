@@ -43,6 +43,48 @@ pub fn is_private_v6(ip: Ipv6Addr) -> bool {
         || matches!(ip.to_ipv4_mapped(), Some(v4) if is_private_v4(v4))
 }
 
+/// Whether an address is ordinary public unicast that an operator-declared
+/// security test may target. Strictly narrower than `!is_private_*`: it also
+/// refuses documentation, benchmarking and IETF-reserved ranges, site-local
+/// IPv6, and every IPv6 form that embeds an IPv4 address (mapped, NAT64,
+/// 6to4, Teredo, IPv4-compatible), because the embedded address cannot be
+/// policed reliably at the edge.
+pub fn is_public_target(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            let o = v4.octets();
+            !(is_private_v4(v4)
+                || v4.is_documentation()
+                // 192.0.0.0/24 IETF protocol assignments
+                || (o[0] == 192 && o[1] == 0 && o[2] == 0)
+                // 192.88.99.0/24 deprecated 6to4 relay anycast
+                || (o[0] == 192 && o[1] == 88 && o[2] == 99)
+                // 198.18.0.0/15 benchmarking
+                || (o[0] == 198 && (o[1] & 0xfe) == 18))
+        }
+        std::net::IpAddr::V6(v6) => {
+            let seg = v6.segments();
+            !(is_private_v6(v6)
+                || v6.to_ipv4_mapped().is_some()
+                // IPv4-compatible ::a.b.c.d (deprecated)
+                || (seg[..6] == [0, 0, 0, 0, 0, 0])
+                // 64:ff9b::/96 and 64:ff9b:1::/48 NAT64
+                || (seg[0] == 0x64 && seg[1] == 0xff9b)
+                // 2002::/16 6to4
+                || seg[0] == 0x2002
+                // 2001::/32 Teredo, 2001:db8::/32 documentation,
+                // 2001:2::/48 benchmarking, 2001:10::/28 ORCHID
+                || (seg[0] == 0x2001 && (seg[1] == 0 || seg[1] == 0x0db8 || seg[1] == 2 || (seg[1] & 0xfff0) == 0x10))
+                // 100::/64 discard
+                || (seg[0] == 0x100 && seg[1..4] == [0, 0, 0])
+                // fec0::/10 deprecated site-local
+                || (seg[0] & 0xffc0) == 0xfec0
+                // 3fff::/20 documentation (RFC 9637)
+                || (seg[0] == 0x3fff && (seg[1] & 0xf000) == 0))
+        }
+    }
+}
+
 /// Whether a hostname matches a well-known cloud metadata service.
 pub fn is_metadata_host(host: &str) -> bool {
     let h = host.trim_end_matches('.').to_ascii_lowercase();
@@ -134,5 +176,56 @@ mod tests {
         );
         assert_eq!(host_from_url("http://[::1]:8080/x"), Some("::1"));
         assert_eq!(host_from_url("no-scheme/path"), None);
+    }
+
+    #[test]
+    fn public_target_refuses_every_internal_or_reserved_form() {
+        use std::net::IpAddr;
+        for ip in [
+            "10.0.0.1",
+            "172.16.0.1",
+            "192.168.1.1",
+            "127.0.0.1",
+            "169.254.169.254",
+            "100.64.0.1",
+            "0.0.0.0",
+            "255.255.255.255",
+            "224.0.0.1",
+            "240.0.0.1",
+            "192.0.2.10",
+            "198.51.100.1",
+            "203.0.113.9",
+            "192.0.0.8",
+            "198.18.0.1",
+            "192.88.99.1",
+            "::1",
+            "::",
+            "fe80::1",
+            "fd00::1",
+            "fec0::1",
+            "ff02::1",
+            "::ffff:10.0.0.1",
+            "::ffff:8.8.8.8",
+            "::8.8.8.8",
+            "64:ff9b::a00:1",
+            "2002:a00:1::1",
+            "2001::1",
+            "2001:db8::1",
+            "2001:2::1",
+            "2001:10::1",
+            "100::1",
+            "3fff::1",
+        ] {
+            assert!(!is_public_target(ip.parse::<IpAddr>().unwrap()), "{ip}");
+        }
+        for ip in [
+            "93.184.216.34",
+            "8.8.8.8",
+            "1.1.1.1",
+            "2606:4700:4700::1111",
+            "2a00:1450:4001::1",
+        ] {
+            assert!(is_public_target(ip.parse::<IpAddr>().unwrap()), "{ip}");
+        }
     }
 }

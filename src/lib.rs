@@ -19,6 +19,8 @@
 //!   `oauth-client`).
 //! - [`cost`] — the `/v1/internal/audit/calls` cost-row wire DTO.
 //! - [`feedback`] — the conversation feedback rating + entry.
+//! - `glitch_scope` (feature `glitch-scope`) — the one Glitch web-scope
+//!   compiler Glitch and Swarm both run and must agree on.
 //! - [`marketplace`] — the published skill-catalog wire DTOs.
 //! - [`state_sync`] — the durable-state predicate, upload envelope, and
 //!   sandbox env-var names for the state mirror.
@@ -35,6 +37,8 @@ pub mod contracts;
 pub mod cost;
 pub mod date;
 pub mod feedback;
+#[cfg(feature = "glitch-scope")]
+pub mod glitch_scope;
 pub mod jsonrpc;
 pub mod marketplace;
 pub mod net;
