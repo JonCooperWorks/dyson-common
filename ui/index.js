@@ -18,6 +18,7 @@ export {
   setBrandMarkVariant,
   useBrandMarkVariant,
 } from './DysonMark.jsx';
+export { GlitchMark } from './GlitchMark.jsx';
 export {
   MARK_VARIANTS,
   MARK_VARIANT_LABELS,

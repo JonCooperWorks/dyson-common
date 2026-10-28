@@ -150,7 +150,7 @@ npm install && npm run build && npm test
 
 ```jsonc
 // package.json of each web app — pin to a tag, like the Rust dep
-"dyson-common-ui": "git+ssh://git@github.com/JonCooperWorks/dyson-common.git#ui-v0.1.20"
+"dyson-common-ui": "git+ssh://git@github.com/JonCooperWorks/dyson-common.git#ui-v0.1.21"
 ```
 
 ```js
