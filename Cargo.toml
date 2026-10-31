@@ -51,6 +51,10 @@ resolver = "2"
 vectorscan-rs = { git = "https://github.com/mongodb/kingfisher", tag = "v2.7.0" }
 vectorscan-rs-sys = { git = "https://github.com/mongodb/kingfisher", tag = "v2.7.0" }
 
+[profile.dev]
+# File/line tables are enough for backtraces; full DWARF roughly doubles target/.
+debug = "line-tables-only"
+
 # Compiling Kingfisher's rules takes minutes unoptimised.
 [profile.dev.package.vectorscan-rs-sys]
 opt-level = 3
