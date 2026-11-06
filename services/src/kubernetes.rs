@@ -221,9 +221,21 @@ impl Cluster {
         }
     }
 
+    /// Infer the product's Kubernetes credentials without exposing transport types.
+    pub async fn infer(namespace: &str, manager: &str) -> anyhow::Result<Self> {
+        Ok(Self::new(
+            kube::Client::try_default().await?,
+            namespace,
+            manager,
+        ))
+    }
+
     /// An unauthenticated Kubernetes API, for local test fixtures.
     pub fn at(url: &str, namespace: &str, manager: &str) -> anyhow::Result<Self> {
+        #[cfg(feature = "ring")]
         let _ = rustls::crypto::ring::default_provider().install_default();
+        #[cfg(all(feature = "aws-lc-rs", not(feature = "ring")))]
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
         let mut config = kube::Config::new(url.parse().context("the Kubernetes API address")?);
         config.default_namespace = namespace.into();
         Ok(Self::new(

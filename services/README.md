@@ -42,3 +42,10 @@ Run `cargo test -p dyson-services` and
 Tests exercise template validation, state derivation and explicit installation
 policy, plus Kubernetes apply/stop/PVC lifetime/delete/log operations against a
 local API stand-in. They require localhost socket access, no real cluster.
+
+
+Transport defaults remain `ring` for the honeypot. Applications using AWS-LC can
+select `default-features = false, features = ["aws-lc-rs"]`, keeping one Rustls
+crypto provider. `Cluster::infer(namespace, manager)` uses the application's
+Kubernetes credentials without requiring it to share this crate's kube version.
+The product still supplies namespace, manager and every Placement setting.
