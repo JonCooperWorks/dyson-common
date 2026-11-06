@@ -172,3 +172,10 @@ export default defineConfig({ plugins: [react(), buildId.plugin], define: buildI
 Each consumer's Vite config sets `resolve.dedupe: ['react','react-dom']`
 so the peer React resolves to a single instance.  Bumping the UI: rebuild
 `dist/`, tag `ui-vX.Y.Z` here, bump the tag in both web apps, run all suites.
+
+## Container services
+
+[`dyson-services`](services/README.md) provides product-neutral container
+configuration, credential templates, Kubernetes object rendering, lifecycle
+operations, status and logs. Products supply installation policy and own their
+persistence, authorization, routing and reconciliation.
