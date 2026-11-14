@@ -18,6 +18,8 @@ pub const MAX_ENV: usize = 64;
 pub const MAX_FILES: usize = 32;
 pub const MAX_RENDERED: usize = 512 * 1024;
 pub const MAX_VOLUME_GIB: u32 = 20;
+/// The largest memory limit a Service pod may ask for. The pod requests half.
+pub const MAX_MEMORY_MIB: u32 = 8192;
 /// Capabilities a service may have back after all are dropped: the ones
 /// Pod Security `baseline` allows, which an image running as root needs to
 /// drop to its own user.
@@ -304,8 +306,8 @@ impl Workload {
             "CPU is between 50 and 2000 millicores"
         );
         anyhow::ensure!(
-            (64..=4096).contains(&resources.memory_mib),
-            "memory is between 64 and 4096 MiB"
+            (64..=MAX_MEMORY_MIB).contains(&resources.memory_mib),
+            "memory is between 64 and {MAX_MEMORY_MIB} MiB"
         );
         Ok(())
     }
@@ -488,6 +490,12 @@ mod tests {
         bad = valid.clone();
         bad.spec.resources.memory_mib = 0;
         assert!(bad.validate().is_err());
+        bad = valid.clone();
+        bad.spec.resources.memory_mib = MAX_MEMORY_MIB + 1;
+        assert!(bad.validate().is_err());
+        let mut largest = valid.clone();
+        largest.spec.resources.memory_mib = MAX_MEMORY_MIB;
+        assert!(largest.validate().is_ok());
         bad = valid.clone();
         bad.spec.env = vec![
             EnvVar {
