@@ -66,3 +66,17 @@ export {
   DetailList,
   JsonCodeBlock,
 } from './GatewayPrimitives.jsx';
+export * as fmt from './fmt.js';
+export { StatusDot, STATUS_DOT_STATES } from './StatusDot.jsx';
+export { SeverityTag, severityLevel } from './SeverityTag.jsx';
+export { SwarmBar, useSwarmContext } from './SwarmBar.jsx';
+export {
+  SWARM_CONTEXT_PATH,
+  parseSwarmContext,
+  loadSwarmContext,
+  getSwarmContext,
+  swarmAgentHref,
+  swarmHref,
+  safeName,
+  isAgentId,
+} from './swarmContext.js';

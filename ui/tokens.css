@@ -1,4 +1,8 @@
-/* swarm + dyson — shared design tokens.
+/* swarm + dyson — shared design tokens (UX spec v2, section 4).
+ *
+ * The single source of the look the two apps share: fonts, colour roles,
+ * severity colours, type scale, spacing, radii and elevation. Each app keeps
+ * only its own layout tokens (and any deliberate override) in its own CSS.
  *
  * Dark is the default (`:root`).  Light is applied two ways:
  *   • explicit user choice   → `:root[data-theme="light"]`
@@ -12,12 +16,32 @@
  * sync — CSS can't share one declaration list across a bare selector and a
  * media-nested one. */
 
+/* Fonts (spec 4.1): Geist for the UI, JetBrains Mono for IDs, model and tool
+   names, code and payloads. Self-hosted Latin subsets so each app's CSP stays
+   `font-src 'self'`; one file per family covers 400–700. */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./fonts/geist-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./fonts/jetbrainsmono-400.woff2') format('woff2');
+}
+
 :root {
   /* Match native form controls (button text, scrollbars, inputs) to the
      visual theme.  Without this, a page-level "dark light" preference makes
      the UA render buttontext white, so any bare <button> in light mode gets
      invisible white text (e.g. the agent-kind cards). */
   color-scheme: dark;
+
+  /* Colour roles (spec 4.3). Neutral surfaces; colour is for meaning. */
   --bg: #0f1115;
   --bg-1: #161922;
   --bg-2: #1d2230;
@@ -27,54 +51,84 @@
   --border: #262b39;
   --accent: #6ea9ff;
   --accent-fg: #0f1115;
-  --danger: #f87171;
-  --warn: #fbbf24;
-  --ok: #34d399;
+  --danger: #ff7979;
+  --warn: #f5be55;
+  --ok: #50c99a;
+  /* Severity: the only place these three appear together. */
+  --sev-high: #ff7979;
+  --sev-medium: #f5be55;
+  --sev-low: #9aa3b2;
   /* Ink for text/icons sitting ON a solid status colour (--ok/--warn/--danger
      as a background).  Dark theme's status colours are bright, so ink is dark;
-     light theme's are deep, so ink is white.  Lets a solid status badge stay
-     legible in both themes from one declaration. */
+     light theme's are deep, so ink is white. */
   --on-solid: #0b1220;
+  --focus-ring: 2px solid var(--accent);
 
-  /* Elevation — dark leans on deep, near-black shadows.  Consumers read
-     these so a single change reflows every raised surface in both themes. */
+  /* Elevation. Borders, not shadows, for resting surfaces; --shadow-float is
+     the one shadow for floating layers (popover, omnibar, sheet). */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-2: 0 6px 22px rgba(0, 0, 0, 0.25);
   --shadow-3: 0 18px 38px -12px rgba(0, 0, 0, 0.6);
+  --shadow-float: 0 8px 24px rgb(0 0 0 / .16);
   /* Scrim behind modals/menus. */
   --scrim: rgba(0, 0, 0, 0.5);
 
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Type (spec 4.1). Base stays 14. */
+  --sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-xs: 12px;
+  --text-xs-lh: 16px;
+  --text-sm: 13px;
+  --text-sm-lh: 18px;
+  --text-md: 14px;
+  --text-md-lh: 20px;
+  --text-lg: 16px;
+  --text-lg-lh: 24px;
+  --text-xl: 20px;
+  --text-xl-lh: 28px;
+  --text-2xl: 28px;
+  --text-2xl-lh: 32px;
+
+  /* Spacing and radii (spec 4.2). */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --radius-sm: 4px;
   --radius: 6px;
+  --radius-lg: 10px;
   --gap: 12px;
   --control-height: 34px;
+  --control-height-compact: 32px;
 }
 
-/* Light palette.  Blue-tinted so it keeps the dark theme's blue identity
-   rather than reading as neutral grey — surfaces, borders and text all carry
-   a cool blue undertone, and the accent stays a clear blue (deepened for AA
-   contrast on white).  Shadows use a blue base too. */
+/* Light palette: neutral greys, so severity colours read as meaning. */
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #eef2fb;
+  --bg: #f6f7f9;
   --bg-1: #ffffff;
-  --bg-2: #e2e9f7;
-  --fg: #101a2e;
-  --fg-muted: #46536e;
-  --fg-faint: #5f6b85;
-  --border: #d3ddf0;
+  --bg-2: #eceef2;
+  --fg: #111827;
+  --fg-muted: #4b5565;
+  --fg-faint: #667085;
+  --border: #dde1e8;
   --accent: #2563eb;
   --accent-fg: #ffffff;
-  --danger: #dc2626;
-  --warn: #b45309;
-  --ok: #047857;
+  --danger: #c9363e;
+  --warn: #9a650c;
+  --ok: #167554;
+  --sev-high: #c9363e;
+  --sev-medium: #9a650c;
+  --sev-low: #667085;
   --on-solid: #ffffff;
 
-  --shadow-1: 0 1px 2px rgba(30, 58, 138, 0.10);
-  --shadow-2: 0 6px 20px -6px rgba(30, 58, 138, 0.16), 0 2px 6px -2px rgba(30, 58, 138, 0.10);
-  --shadow-3: 0 18px 40px -14px rgba(30, 58, 138, 0.22), 0 6px 14px -6px rgba(30, 58, 138, 0.14);
-  --scrim: rgba(15, 23, 45, 0.32);
+  --shadow-1: 0 1px 2px rgba(17, 24, 39, 0.08);
+  --shadow-2: 0 6px 20px -6px rgba(17, 24, 39, 0.14), 0 2px 6px -2px rgba(17, 24, 39, 0.08);
+  --shadow-3: 0 18px 40px -14px rgba(17, 24, 39, 0.20), 0 6px 14px -6px rgba(17, 24, 39, 0.12);
+  --scrim: rgba(17, 24, 39, 0.32);
 }
 
 @media (prefers-color-scheme: light) {
@@ -82,23 +136,26 @@
      the [data-theme="light"] block above. */
   :root:not([data-theme]) {
     color-scheme: light;
-    --bg: #eef2fb;
+    --bg: #f6f7f9;
     --bg-1: #ffffff;
-    --bg-2: #e2e9f7;
-    --fg: #101a2e;
-    --fg-muted: #46536e;
-    --fg-faint: #5f6b85;
-    --border: #d3ddf0;
+    --bg-2: #eceef2;
+    --fg: #111827;
+    --fg-muted: #4b5565;
+    --fg-faint: #667085;
+    --border: #dde1e8;
     --accent: #2563eb;
     --accent-fg: #ffffff;
-    --danger: #dc2626;
-    --warn: #b45309;
-    --ok: #047857;
+    --danger: #c9363e;
+    --warn: #9a650c;
+    --ok: #167554;
+    --sev-high: #c9363e;
+    --sev-medium: #9a650c;
+    --sev-low: #667085;
     --on-solid: #ffffff;
 
-    --shadow-1: 0 1px 2px rgba(30, 58, 138, 0.10);
-    --shadow-2: 0 6px 20px -6px rgba(30, 58, 138, 0.16), 0 2px 6px -2px rgba(30, 58, 138, 0.10);
-    --shadow-3: 0 18px 40px -14px rgba(30, 58, 138, 0.22), 0 6px 14px -6px rgba(30, 58, 138, 0.14);
-    --scrim: rgba(15, 23, 45, 0.32);
+    --shadow-1: 0 1px 2px rgba(17, 24, 39, 0.08);
+    --shadow-2: 0 6px 20px -6px rgba(17, 24, 39, 0.14), 0 2px 6px -2px rgba(17, 24, 39, 0.08);
+    --shadow-3: 0 18px 40px -14px rgba(17, 24, 39, 0.20), 0 6px 14px -6px rgba(17, 24, 39, 0.12);
+    --scrim: rgba(17, 24, 39, 0.32);
   }
 }

@@ -150,7 +150,7 @@ npm install && npm run build && npm test
 
 ```jsonc
 // package.json of each web app — pin to a tag, like the Rust dep
-"dyson-common-ui": "git+ssh://git@github.com/JonCooperWorks/dyson-common.git#ui-v0.1.21"
+"dyson-common-ui": "git+ssh://git@github.com/JonCooperWorks/dyson-common.git#ui-v0.1.22"
 ```
 
 ```js
@@ -158,6 +158,14 @@ import { Modal, Combobox, useEscapeKey } from 'dyson-common-ui';
 import 'dyson-common-ui/tokens.css';      // canonical tokens (the shared look)
 import 'dyson-common-ui/components.css';   // <Modal>/<Combobox> styles
 ```
+
+`tokens.css` is the single source of the look both apps share (UX spec 4.1–4.3):
+the Geist and JetBrains Mono `@font-face` rules and files (`ui/fonts/`), colour
+roles, severity colours, type scale, spacing and radii. The kit adds
+`StatusDot`, `SeverityTag`, the spec 4.5 display formats as the `fmt` namespace
+(`fmt.formatRelative`, `fmt.formatMoney`, …) and the Dyson app's `SwarmBar`
+with `useSwarmContext` / `parseSwarmContext` (the validated
+`GET /_swarm/context` answer the Swarm proxy serves on an agent's host).
 
 Shared component classes are prefixed `dc-` (`dc-pager`, `dc-seg`,
 `dc-sort-*`) so they never collide with an app's own.

@@ -1,6 +1,6 @@
 {
   "name": "dyson-common-ui",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "private": false,
   "type": "module",
   "description": "Shared React UI primitives + design tokens for dyson and dyson-swarm. Ships pre-built ESM (dist/) so consumers import plain JS over a git dependency.",
@@ -10,13 +10,15 @@
     "dist",
     "ui/tokens.css",
     "ui/components.css",
+    "ui/fonts",
     "ui/vite.js"
   ],
   "exports": {
     ".": "./dist/index.js",
     "./tokens.css": "./ui/tokens.css",
     "./components.css": "./ui/components.css",
-    "./vite": "./ui/vite.js"
+    "./vite": "./ui/vite.js",
+    "./fonts/*": "./ui/fonts/*"
   },
   "peerDependencies": {
     "react": ">=19",

@@ -1,3 +1,9 @@
+var __defProp = Object.defineProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+
 // ui/Modal.jsx
 import React2 from "react";
 
@@ -1208,8 +1214,8 @@ function createThemeController({ storageKey, stripInstanceLabel = false }) {
     document.cookie = `${COOKIE}=${mode}; Path=/; Max-Age=31536000; SameSite=Lax` + (dom ? `; Domain=${dom}` : "") + (location.protocol === "https:" ? "; Secure" : "");
   }
   function getMode() {
-    const shared = readCookie();
-    if (shared) return shared;
+    const shared2 = readCookie();
+    if (shared2) return shared2;
     try {
       const v = localStorage.getItem(storageKey);
       return MODES.includes(v) ? v : "system";
@@ -1497,10 +1503,10 @@ function TrendSparkline({ history, threshold }) {
   if (points.length < 2) return null;
   const W = 240;
   const H = 44;
-  const pad = 4;
+  const pad2 = 4;
   const n = points.length;
-  const x = (i) => pad + i * (W - 2 * pad) / (n - 1);
-  const y = (s) => H - pad - s * (H - 2 * pad);
+  const x = (i) => pad2 + i * (W - 2 * pad2) / (n - 1);
+  const y = (s) => H - pad2 - s * (H - 2 * pad2);
   const path = points.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.score).toFixed(1)}`).join(" ");
   const thr = Number.isFinite(threshold) ? y(threshold) : null;
   return /* @__PURE__ */ React12.createElement("div", { className: "evalrep-trend" }, /* @__PURE__ */ React12.createElement("span", { className: "evalrep-trend-label" }, "score trend \xB7 ", n, " runs"), /* @__PURE__ */ React12.createElement(
@@ -1833,6 +1839,363 @@ function JsonCodeBlock({ value, label = "JSON", copyLabel = "Copy", className = 
   const shown = state === "copied" ? "Copied" : state === "selected" ? "Selected \xB7 press \u2318C" : state === "failed" ? "Copy failed" : copyLabel;
   return /* @__PURE__ */ React15.createElement("section", { className: `gateway-code ${className}`.trim() }, /* @__PURE__ */ React15.createElement("div", { className: "gateway-code-head" }, /* @__PURE__ */ React15.createElement("span", null, label), /* @__PURE__ */ React15.createElement("button", { type: "button", onClick: copy }, shown)), /* @__PURE__ */ React15.createElement("pre", null, /* @__PURE__ */ React15.createElement("code", { ref: code }, text2)));
 }
+
+// ui/fmt.js
+var fmt_exports = {};
+__export(fmt_exports, {
+  formatAbsolute: () => formatAbsolute,
+  formatCount: () => formatCount2,
+  formatDay: () => formatDay,
+  formatDuration: () => formatDuration2,
+  formatDurationMs: () => formatDurationMs,
+  formatFull: () => formatFull,
+  formatMoney: () => formatMoney,
+  formatRelative: () => formatRelative,
+  isoTime: () => isoTime,
+  midTruncate: () => midTruncate,
+  shortId: () => shortId,
+  toDate: () => toDate
+});
+var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+var WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+var DASH = "\u2014";
+var pad = (n) => String(n).padStart(2, "0");
+function toDate(value) {
+  if (value == null || value === "" || value === 0) return null;
+  let d;
+  if (value instanceof Date) d = value;
+  else if (typeof value === "number") d = new Date(Math.abs(value) < 1e11 ? value * 1e3 : value);
+  else if (typeof value === "string" && /^\d+(\.\d+)?$/.test(value.trim())) return toDate(Number(value));
+  else d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+function nowDate(now) {
+  return toDate(now) || /* @__PURE__ */ new Date();
+}
+var clock = (d, seconds = false) => `${pad(d.getHours())}:${pad(d.getMinutes())}${seconds ? `:${pad(d.getSeconds())}` : ""}`;
+var sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+var dayStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+function formatDay(value, { now } = {}) {
+  const d = toDate(value);
+  if (!d) return DASH;
+  const n = nowDate(now);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}${d.getFullYear() === n.getFullYear() ? "" : ` ${d.getFullYear()}`}`;
+}
+function formatAbsolute(value, { now, seconds = true } = {}) {
+  const d = toDate(value);
+  if (!d) return DASH;
+  return `${formatDay(d, { now })} ${clock(d, seconds)}`;
+}
+function formatFull(value) {
+  const d = toDate(value);
+  if (!d) return "";
+  const local = `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()} ${clock(d, true)}`;
+  const utc = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} UTC`;
+  return `${local} \xB7 ${utc}`;
+}
+function isoTime(value) {
+  const d = toDate(value);
+  return d ? d.toISOString() : void 0;
+}
+function formatRelative(value, { now } = {}) {
+  const d = toDate(value);
+  if (!d) return DASH;
+  const n = nowDate(now);
+  const delta = (d.getTime() - n.getTime()) / 1e3;
+  const a = Math.abs(delta);
+  if (delta <= 0 || a < 60) {
+    if (a < 60) return delta > 0 ? "in under a minute" : "Just now";
+    if (a < 3600) return `${Math.floor(a / 60)} min ago`;
+    if (a < 86400) return `${Math.floor(a / 3600)} h ago`;
+    if (a < 7 * 86400) return `${WEEKDAYS[d.getDay()]} ${clock(d)}`;
+    return formatDay(d, { now: n });
+  }
+  if (a < 3600) return `in ${Math.max(1, Math.round(a / 60))} min`;
+  if (sameDay(d, n)) return `in ${Math.round(a / 3600)} h`;
+  if (dayStart(d) - dayStart(n) <= 864e5 + 36e5) return `tomorrow ${clock(d)}`;
+  if (a < 7 * 86400) return `${WEEKDAYS[d.getDay()]} ${clock(d)}`;
+  return formatDay(d, { now: n });
+}
+function formatDuration2(secs) {
+  const s = Number(secs);
+  if (secs == null || secs === "" || !Number.isFinite(s) || s < 0) return DASH;
+  if (s < 10) return `${s < 1 ? s.toFixed(1) : (Math.round(s * 10) / 10).toString()} s`;
+  if (s < 60) return `${Math.round(s)} s`;
+  const whole = Math.round(s);
+  if (whole < 3600) {
+    const m = Math.floor(whole / 60);
+    const rest = whole % 60;
+    return m < 10 && rest ? `${m} min ${rest} s` : `${m} min`;
+  }
+  if (whole < 86400) {
+    const h2 = Math.floor(whole / 3600);
+    const m = Math.floor(whole % 3600 / 60);
+    return m ? `${h2} h ${m} min` : `${h2} h`;
+  }
+  const days = Math.floor(whole / 86400);
+  const h = Math.floor(whole % 86400 / 3600);
+  return h ? `${days} d ${h} h` : `${days} d`;
+}
+function formatDurationMs(ms) {
+  const n = Number(ms);
+  if (ms == null || ms === "" || !Number.isFinite(n)) return DASH;
+  if (n < 1e3) return `${Math.round(n)} ms`;
+  return formatDuration2(n / 1e3);
+}
+var GROUPED_2 = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+var GROUPED_0 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+function formatMoney(usd, { ownPlan = false } = {}) {
+  if (ownPlan) return "Own plan";
+  if (usd == null || usd === "") return DASH;
+  const n = Number(usd);
+  if (!Number.isFinite(n)) return DASH;
+  if (n === 0) return "$0.00";
+  const sign = n < 0 ? "-" : "";
+  const a = Math.abs(n);
+  if (a < 5e-3) return `${sign}<$0.01`;
+  return `${sign}$${GROUPED_2.format(a)}`;
+}
+function formatCount2(value) {
+  if (value == null || value === "") return DASH;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return DASH;
+  const a = Math.abs(n);
+  if (a < 1e4) return GROUPED_0.format(n);
+  const [div, unit] = a >= 1e9 ? [1e9, "B"] : a >= 1e6 ? [1e6, "M"] : [1e3, "k"];
+  const scaled = n / div;
+  const text2 = Math.abs(scaled) >= 100 ? Math.round(scaled).toString() : (Math.round(scaled * 10) / 10).toString();
+  return `${text2}${unit}`;
+}
+function midTruncate(value, max = 20) {
+  const s = String(value ?? "");
+  if (s.length <= max) return s;
+  const keep = Math.max(2, max - 1);
+  const head = Math.ceil(keep / 2);
+  const tail = keep - head;
+  return `${s.slice(0, head)}\u2026${s.slice(s.length - tail)}`;
+}
+function shortId(value, { head = 8, tail = 3, max = 12 } = {}) {
+  const s = String(value || "");
+  if (!s) return DASH;
+  return s.length > max ? `${s.slice(0, head)}\u2026${s.slice(-tail)}` : s;
+}
+
+// ui/StatusDot.jsx
+import React16 from "react";
+var STATES = {
+  working: "Working",
+  waiting: "Waiting on you",
+  idle: "Idle",
+  failed: "Failed",
+  unreachable: "Unreachable",
+  stopped: "Stopped"
+};
+var STATUS_DOT_STATES = Object.keys(STATES);
+function StatusDot({ state = "idle", label, hideLabel = false, className = "" }) {
+  const s = STATES[state] ? state : "idle";
+  const text2 = label || STATES[s];
+  return /* @__PURE__ */ React16.createElement("span", { className: `status-dot-wrap${className ? ` ${className}` : ""}` }, /* @__PURE__ */ React16.createElement("span", { className: `status-dot status-dot-${s}`, "aria-hidden": "true" }), /* @__PURE__ */ React16.createElement("span", { className: hideLabel ? "sr-only" : "status-dot-label" }, text2));
+}
+
+// ui/SeverityTag.jsx
+import React17 from "react";
+var LABELS = { high: "High", medium: "Medium", low: "Low" };
+function severityLevel(value) {
+  const v = String(value || "").toLowerCase();
+  if (v === "critical" || v === "high" || v === "error") return "high";
+  if (v === "medium" || v === "moderate" || v === "warning" || v === "warn") return "medium";
+  return "low";
+}
+function SeverityTag({ severity, label, className = "" }) {
+  const level = severityLevel(severity);
+  return /* @__PURE__ */ React17.createElement("span", { className: `severity-tag severity-${level}${className ? ` ${className}` : ""}` }, /* @__PURE__ */ React17.createElement("span", { className: "severity-shape", "aria-hidden": "true" }), label || LABELS[level]);
+}
+
+// ui/SwarmBar.jsx
+import React18, { useEffect as useEffect5, useRef as useRef4, useState as useState7 } from "react";
+
+// ui/swarmContext.js
+var SWARM_CONTEXT_PATH = "/_swarm/context";
+var ID = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+var MAX_NAME = 120;
+var UNSAFE = /[\u0000-\u001f\u007f-\u009f؜‎‏‪-‮⁦-⁩]/g;
+function isAgentId(value) {
+  return typeof value === "string" && ID.test(value);
+}
+function safeName(value, fallback = "") {
+  const text2 = String(value ?? "").replace(UNSAFE, "").trim();
+  return text2 ? Array.from(text2).slice(0, MAX_NAME).join("") : fallback;
+}
+function apexOrigin(value) {
+  if (typeof value !== "string") return null;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" || url.username || url.password) return null;
+  if (url.pathname !== "/" && url.pathname !== "" || url.search || url.hash) return null;
+  return url;
+}
+function chatUrl(value, id, apex) {
+  if (typeof value !== "string") return null;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) return null;
+  if (url.pathname !== "/" || url.port !== apex.port) return null;
+  if (url.hostname !== `${id}.${apex.hostname}`) return null;
+  return `${url.origin}/`;
+}
+function parseSwarmContext(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const apex = apexOrigin(raw.apex_url);
+  const instance = raw.instance;
+  if (!apex || !instance || !isAgentId(instance.id)) return null;
+  const agents = [];
+  for (const a of Array.isArray(raw.agents) ? raw.agents : []) {
+    if (!a || !isAgentId(a.id)) continue;
+    const openUrl = chatUrl(a.open_url, a.id, apex);
+    if (!openUrl) continue;
+    agents.push({ id: a.id, name: safeName(a.name, a.id), openUrl });
+  }
+  return {
+    apexUrl: `${apex.origin}/`,
+    instance: { id: instance.id, name: safeName(instance.name, instance.id) },
+    agents
+  };
+}
+function swarmAgentHref(context, id = context?.instance?.id) {
+  if (!context || !isAgentId(id)) return null;
+  return `${context.apexUrl}#/i/${encodeURIComponent(id)}`;
+}
+function swarmHref(context, route) {
+  if (!context || typeof route !== "string" || !/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(route)) return null;
+  return `${context.apexUrl}#/${route}`;
+}
+async function loadSwarmContext({ fetch: fetchImpl = globalThis.fetch, signal } = {}) {
+  if (typeof fetchImpl !== "function") return null;
+  try {
+    const r = await fetchImpl(SWARM_CONTEXT_PATH, {
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+      signal
+    });
+    if (!r || !r.ok) return null;
+    const type = r.headers?.get?.("content-type") || "";
+    if (!type.includes("application/json")) return null;
+    return parseSwarmContext(await r.json());
+  } catch {
+    return null;
+  }
+}
+var shared = null;
+function getSwarmContext({ fetch: fetchImpl, reset = false } = {}) {
+  if (reset) shared = null;
+  if (!shared) shared = loadSwarmContext(fetchImpl ? { fetch: fetchImpl } : {});
+  return shared;
+}
+
+// ui/SwarmBar.jsx
+function Chevron4({ dir = "left" }) {
+  const d = dir === "left" ? "M10 3.5 5.5 8l4.5 4.5" : "M4 6l4 4 4-4";
+  return /* @__PURE__ */ React18.createElement(
+    "svg",
+    {
+      className: "swarm-bar-icon",
+      width: "16",
+      height: "16",
+      viewBox: "0 0 16 16",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "1.35",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      "aria-hidden": "true"
+    },
+    /* @__PURE__ */ React18.createElement("path", { d })
+  );
+}
+function SwarmBar({ context, className = "" }) {
+  const [open, setOpen] = useState7(false);
+  const buttonRef = useRef4(null);
+  const menuRef = useRef4(null);
+  const back = swarmAgentHref(context);
+  const all = swarmHref(context, "agents");
+  useEffect5(() => {
+    if (!open) return void 0;
+    const first = menuRef.current?.querySelector("a");
+    first?.focus();
+    const onDown = (e) => {
+      if (menuRef.current?.contains(e.target) || buttonRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+  if (!context || !back) return null;
+  const current = context.instance;
+  const close = (refocus) => {
+    setOpen(false);
+    if (refocus) buttonRef.current?.focus();
+  };
+  const onMenuKey = (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      close(true);
+      return;
+    }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const links = Array.from(menuRef.current?.querySelectorAll("a") || []);
+    if (!links.length) return;
+    e.preventDefault();
+    const at = links.indexOf(document.activeElement);
+    const next = e.key === "ArrowDown" ? (at + 1) % links.length : (at - 1 + links.length) % links.length;
+    links[next].focus();
+  };
+  return /* @__PURE__ */ React18.createElement("nav", { className: `swarm-bar${className ? ` ${className}` : ""}`, "aria-label": "Swarm" }, /* @__PURE__ */ React18.createElement("a", { className: "swarm-bar-back", href: back, title: "Back to this agent in Swarm" }, /* @__PURE__ */ React18.createElement(Chevron4, null), /* @__PURE__ */ React18.createElement("span", null, "Swarm")), /* @__PURE__ */ React18.createElement("span", { className: "swarm-bar-switch" }, /* @__PURE__ */ React18.createElement(
+    "button",
+    {
+      ref: buttonRef,
+      type: "button",
+      className: "swarm-bar-agent",
+      "aria-haspopup": "true",
+      "aria-expanded": open,
+      title: current.name,
+      onClick: () => setOpen((v) => !v)
+    },
+    /* @__PURE__ */ React18.createElement("span", { className: "swarm-bar-name" }, current.name),
+    /* @__PURE__ */ React18.createElement(Chevron4, { dir: "down" })
+  ), open && /* @__PURE__ */ React18.createElement("div", { ref: menuRef, className: "swarm-bar-menu", onKeyDown: onMenuKey }, /* @__PURE__ */ React18.createElement("ul", { "aria-label": "Your chat agents" }, context.agents.map((a) => /* @__PURE__ */ React18.createElement("li", { key: a.id }, /* @__PURE__ */ React18.createElement(
+    "a",
+    {
+      href: a.openUrl,
+      "aria-current": a.id === current.id ? "page" : void 0,
+      title: a.name,
+      onClick: () => setOpen(false)
+    },
+    /* @__PURE__ */ React18.createElement("span", { className: "swarm-bar-name" }, a.name)
+  ))), all && /* @__PURE__ */ React18.createElement("li", { className: "swarm-bar-all" }, /* @__PURE__ */ React18.createElement("a", { href: all, onClick: () => setOpen(false) }, "All agents"))))));
+}
+function useSwarmContext() {
+  const [context, setContext] = useState7(null);
+  useEffect5(() => {
+    let live = true;
+    getSwarmContext().then((c) => {
+      if (live) setContext(c);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  return context;
+}
 export {
   Combobox,
   ComputerMark,
@@ -1859,15 +2222,20 @@ export {
   Pager,
   SORT_DIRECTION,
   SORT_NATURAL,
+  STATUS_DOT_STATES,
   SUBSCRIPTION_CONNECT_PROVIDERS,
+  SWARM_CONTEXT_PATH,
   SecurityReportView,
   SegmentedControl,
+  SeverityTag,
   SortGlyph,
   SortPicker,
   SortPill,
   SortTh,
   StatusBadge,
+  StatusDot,
   SubscriptionConnectModal,
+  SwarmBar,
   MODES as THEME_MODES,
   Toolbar,
   base64url,
@@ -1881,24 +2249,34 @@ export {
   deepFreeze,
   downloadBlob,
   firstDesc,
+  fmt_exports as fmt,
   formatBalance,
   formatBytes,
   formatCount,
   formatDuration,
   formatTokens,
   formatUsd,
+  getSwarmContext,
+  isAgentId,
+  loadSwarmContext,
   parseSort,
+  parseSwarmContext,
   pkceChallenge,
   randomString,
+  safeName,
   setBrandMarkVariant,
+  severityLevel,
   sortParam,
   sortRows,
   sortWays,
+  swarmAgentHref,
+  swarmHref,
   useBrandMarkVariant,
   useConfirm,
   useDebounced,
   useEscapeKey,
   usePageSize,
   useSorter,
-  useStored
+  useStored,
+  useSwarmContext
 };
