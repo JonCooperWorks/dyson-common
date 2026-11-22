@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   formatBalance,
   formatBytes,
-  formatCount,
-  formatDuration,
   formatTokens,
   formatUsd,
 } from './format.js';
@@ -41,18 +39,10 @@ describe('compact numbers', () => {
     expect(formatTokens(2_300_000)).toBe('2.3M');
     expect(formatTokens(1_100_000_000)).toBe('1.1B');
   });
-  it('formatCount groups digits', () => {
-    expect(formatCount(1234567)).toBe('1,234,567');
-  });
   it('formatBytes spans B → GB', () => {
     expect(formatBytes(0)).toBe('—');
     expect(formatBytes(512)).toBe('512 B');
     expect(formatBytes(1536)).toBe('1.5 KB');
     expect(formatBytes(3.1 * 1024 ** 3)).toBe('3.1 GB');
-  });
-  it('formatDuration compacts seconds', () => {
-    expect(formatDuration(45)).toBe('45s');
-    expect(formatDuration(720)).toBe('12m');
-    expect(formatDuration(3.4 * 3600)).toBe('3.4h');
   });
 });

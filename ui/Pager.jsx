@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { SegmentedControl } from './SegmentedControl.jsx';
 import { SortPill } from './Sorting.jsx';
-import { formatCount } from './format.js';
+
+// Row numbers stay exact ("10,001–10,025"), never compacted like fmt.formatCount.
+const GROUPED = new Intl.NumberFormat('en-US');
+const formatCount = n => GROUPED.format(Number(n || 0));
 
 /* One paging control for every long list, server-paged or not.
  *

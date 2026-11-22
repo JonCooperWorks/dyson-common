@@ -67,28 +67,3 @@ export function DysonMark({ size = 24, color = DYSON_BLUE, title = 'Dyson', vari
     </svg>
   );
 }
-
-// The Computer-kind mark: the Dyson mark framed inside a monitor. The monitor
-// inherits currentColor (theme ink) so it reads on any card; the mark keeps
-// its brand blue.
-export function ComputerMark({ size = 24, color = DYSON_BLUE, title = 'Dyson Computer', variant, ...rest }) {
-  const appVariant = useBrandMarkVariant();
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 240 224"
-      role="img"
-      aria-label={title}
-      style={{ display: 'block' }}
-      {...rest}
-    >
-      <rect x="16" y="8" width="208" height="152" rx="18" fill="none" stroke="currentColor" strokeWidth="11"/>
-      <rect x="108" y="160" width="24" height="26" fill="currentColor"/>
-      <rect x="74" y="186" width="92" height="14" rx="7" fill="currentColor"/>
-      <g transform="translate(120,84) scale(0.62)">
-        <Glyph color={color} variant={variant ?? appVariant}/>
-      </g>
-    </svg>
-  );
-}

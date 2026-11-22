@@ -790,25 +790,6 @@ function DysonMark({ size = 24, color = DYSON_BLUE, title = "Dyson", variant, ..
     /* @__PURE__ */ React6.createElement(Glyph, { color, variant: variant ?? appVariant })
   );
 }
-function ComputerMark({ size = 24, color = DYSON_BLUE, title = "Dyson Computer", variant, ...rest }) {
-  const appVariant = useBrandMarkVariant();
-  return /* @__PURE__ */ React6.createElement(
-    "svg",
-    {
-      width: size,
-      height: size,
-      viewBox: "0 0 240 224",
-      role: "img",
-      "aria-label": title,
-      style: { display: "block" },
-      ...rest
-    },
-    /* @__PURE__ */ React6.createElement("rect", { x: "16", y: "8", width: "208", height: "152", rx: "18", fill: "none", stroke: "currentColor", strokeWidth: "11" }),
-    /* @__PURE__ */ React6.createElement("rect", { x: "108", y: "160", width: "24", height: "26", fill: "currentColor" }),
-    /* @__PURE__ */ React6.createElement("rect", { x: "74", y: "186", width: "92", height: "14", rx: "7", fill: "currentColor" }),
-    /* @__PURE__ */ React6.createElement("g", { transform: "translate(120,84) scale(0.62)" }, /* @__PURE__ */ React6.createElement(Glyph, { color, variant: variant ?? appVariant }))
-  );
-}
 
 // ui/GlitchMark.jsx
 import React7 from "react";
@@ -843,9 +824,6 @@ function formatTokens(value) {
   if (n >= 1e3) return `${trimFixed(n / 1e3, 1)}k`;
   return String(Math.max(0, Math.round(n)));
 }
-function formatCount(value) {
-  return new Intl.NumberFormat("en-US").format(Number(value || 0));
-}
 function formatBytes(n) {
   if (!Number.isFinite(n) || n <= 0) return "\u2014";
   const units = ["B", "KB", "MB", "GB"];
@@ -856,13 +834,6 @@ function formatBytes(n) {
     i += 1;
   }
   return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
-}
-function formatDuration(seconds) {
-  const s = Math.max(0, Math.round(Number(seconds || 0)));
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.round(s / 60)}m`;
-  const h = s / 3600;
-  return h < 100 ? `${trimFixed(h, 1)}h` : `${Math.round(h)}h`;
 }
 function trimFixed(value, digits) {
   return Number(value).toFixed(digits).replace(/\.0+$|(\.\d*?)0+$/u, "$1");
@@ -1149,6 +1120,8 @@ function SortPicker({ sorter, always = false, boxClassName = "" }) {
 }
 
 // ui/Pager.jsx
+var GROUPED = new Intl.NumberFormat("en-US");
+var formatCount = (n) => GROUPED.format(Number(n || 0));
 var PAGE_SIZES = [25, 50, 100, 200];
 function usePageSize({ storageKey = "dyson-page-size", sizes = PAGE_SIZES, fallback = 50 } = {}) {
   const [size, setSize] = useState3(() => {
@@ -1846,7 +1819,7 @@ __export(fmt_exports, {
   formatAbsolute: () => formatAbsolute,
   formatCount: () => formatCount2,
   formatDay: () => formatDay,
-  formatDuration: () => formatDuration2,
+  formatDuration: () => formatDuration,
   formatDurationMs: () => formatDurationMs,
   formatFull: () => formatFull,
   formatMoney: () => formatMoney,
@@ -1916,7 +1889,7 @@ function formatRelative(value, { now } = {}) {
   if (a < 7 * 86400) return `${WEEKDAYS[d.getDay()]} ${clock(d)}`;
   return formatDay(d, { now: n });
 }
-function formatDuration2(secs) {
+function formatDuration(secs) {
   const s = Number(secs);
   if (secs == null || secs === "" || !Number.isFinite(s) || s < 0) return DASH;
   if (s < 10) return `${s < 1 ? s.toFixed(1) : (Math.round(s * 10) / 10).toString()} s`;
@@ -1940,7 +1913,7 @@ function formatDurationMs(ms) {
   const n = Number(ms);
   if (ms == null || ms === "" || !Number.isFinite(n)) return DASH;
   if (n < 1e3) return `${Math.round(n)} ms`;
-  return formatDuration2(n / 1e3);
+  return formatDuration(n / 1e3);
 }
 var GROUPED_2 = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 var GROUPED_0 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
@@ -2198,7 +2171,6 @@ function useSwarmContext() {
 }
 export {
   Combobox,
-  ComputerMark,
   ConfirmModal,
   DEFAULT_MARK_VARIANT,
   DYSON_BLUE,
@@ -2252,8 +2224,6 @@ export {
   fmt_exports as fmt,
   formatBalance,
   formatBytes,
-  formatCount,
-  formatDuration,
   formatTokens,
   formatUsd,
   getSwarmContext,

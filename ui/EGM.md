@@ -37,11 +37,11 @@ through `dyson_common::ui::DESIGN_TOKENS_CSS`.
   - `copyToClipboard`, `copyText`, `copyFetched` [clipboard.js:copyText]
   - `createBuildWatcher` [buildWatch.js:createBuildWatcher]
 - Brand marks [DysonMark.jsx:DysonMark] [GlitchMark.jsx:GlitchMark] [marks.js:MARK_VARIANTS]:
-  - `DysonMark`, `ComputerMark`, `DysonGlyph` (the `Glyph` component, re-exported under that name), `DYSON_BLUE`
+  - `DysonMark`, `DysonGlyph` (the `Glyph` component, re-exported under that name), `DYSON_BLUE`
   - `setBrandMarkVariant` and `useBrandMarkVariant`
   - `GlitchMark`
   - `MARK_VARIANTS`, `MARK_VARIANT_LABELS`, `MARK_VARIANT_NAMES`, `DEFAULT_MARK_VARIANT` (`orbits`)
-- Formatting: `formatUsd`, `formatBalance`, `formatTokens`, `formatCount`, `formatBytes`, `formatDuration` [format.js:formatUsd]
+- Formatting: `formatUsd`, `formatBalance`, `formatTokens`, `formatBytes` [format.js:formatUsd]; dates, durations, money and counts are the `fmt` namespace [fmt.js:formatDuration] [fmt.js:formatCount]
 - Paging and sorting [Pager.jsx:Pager] [sort.js:sortRows] [Sorting.jsx:useSorter]:
   - `Pager`, `PAGE_SIZES` (`[25, 50, 100, 200]`), `usePageSize`
   - `SORT_NATURAL`, `SORT_DIRECTION`, `firstDesc`, `parseSort`, `sortParam`, `sortWays`, `sortRows`

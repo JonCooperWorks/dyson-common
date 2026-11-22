@@ -36,11 +36,6 @@ export function formatTokens(value) {
   return String(Math.max(0, Math.round(n)));
 }
 
-/// Locale-grouped integer: `1,234,567`.
-export function formatCount(value) {
-  return new Intl.NumberFormat('en-US').format(Number(value || 0));
-}
-
 /// Byte size: `—` for absent, `512 B`, `1.5 KB`, `12 MB`, `3.1 GB`.
 export function formatBytes(n) {
   if (!Number.isFinite(n) || n <= 0) return '—';
@@ -52,15 +47,6 @@ export function formatBytes(n) {
     i += 1;
   }
   return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${units[i]}`;
-}
-
-/// Compact run-time from seconds: "45s", "12m", "3.4h", "210h".
-export function formatDuration(seconds) {
-  const s = Math.max(0, Math.round(Number(seconds || 0)));
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.round(s / 60)}m`;
-  const h = s / 3600;
-  return h < 100 ? `${trimFixed(h, 1)}h` : `${Math.round(h)}h`;
 }
 
 function trimFixed(value, digits) {

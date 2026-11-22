@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, act, cleanup } from '@testing-library/react';
 import React from 'react';
-import { DysonMark, ComputerMark, setBrandMarkVariant } from './DysonMark.jsx';
+import { DysonMark, setBrandMarkVariant } from './DysonMark.jsx';
 import { MARK_VARIANTS, MARK_VARIANT_NAMES, MARK_VARIANT_LABELS, DEFAULT_MARK_VARIANT } from './marks.js';
 
 describe('mark variants', () => {
@@ -39,8 +39,8 @@ describe('mark variants', () => {
   it('an explicit variant prop wins over the app-wide default', () => {
     try {
       act(() => setBrandMarkVariant('eclipse'));
-      const pinned = render(<ComputerMark variant={DEFAULT_MARK_VARIANT}/>);
-      const reference = render(<ComputerMark variant={DEFAULT_MARK_VARIANT}/>);
+      const pinned = render(<DysonMark variant={DEFAULT_MARK_VARIANT}/>);
+      const reference = render(<DysonMark variant={DEFAULT_MARK_VARIANT}/>);
       expect(pinned.container.innerHTML).toEqual(reference.container.innerHTML);
     } finally {
       act(() => setBrandMarkVariant(DEFAULT_MARK_VARIANT));

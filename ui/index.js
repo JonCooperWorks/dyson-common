@@ -12,7 +12,6 @@ export { downloadBlob } from './download.js';
 export { useEscapeKey } from './useEscapeKey.js';
 export {
   DysonMark,
-  ComputerMark,
   Glyph as DysonGlyph,
   DYSON_BLUE,
   setBrandMarkVariant,
@@ -29,9 +28,7 @@ export {
   formatUsd,
   formatBalance,
   formatTokens,
-  formatCount,
   formatBytes,
-  formatDuration,
 } from './format.js';
 export { copyToClipboard, copyText, copyFetched } from './clipboard.js';
 export { createBuildWatcher } from './buildWatch.js';

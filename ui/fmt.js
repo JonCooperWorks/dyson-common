@@ -1,7 +1,6 @@
 /* Spec 4.5 display formats shared by dyson and dyson-swarm: dates, durations,
  * money, counts and IDs. Exported from the package as the `fmt` namespace
- * (`fmt.formatRelative(...)`), so the older `formatDuration`/`formatCount`
- * top-level exports keep their meaning for existing callers.
+ * (`fmt.formatRelative(...)`).
  *
  * Dates are written by hand, not through `Intl`/`toLocale*`: the order must be
  * day-month everywhere ("9 Nov", never "11/9" or "Nov 9"), times are 24 h, and
