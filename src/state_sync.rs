@@ -1,13 +1,8 @@
 //! Dyson ↔ swarm durable-state sync contract.
 //!
 //! Dyson mirrors selected workspace/chat files to swarm (the durable
-//! source of truth) over `POST /v1/internal/state-file`. Both halves of
-//! that wire — the *which files are durable* predicate and the upload
-//! envelope — used to be re-implemented on each side and drifted (dyson
-//! matched `.md` case-sensitively, swarm case-insensitively, so a
-//! `NOTES.MD` passed swarm's validator but was never pushed: silently
-//! non-durable, lost on VM reset). This module is the single canonical
-//! copy; dyson pushes exactly what swarm accepts.
+//! source of truth) over `POST /v1/internal/state/file`. Use the shared
+//! path predicate on both sides to keep upload and admission in sync.
 //!
 //! Env-var names for the sandbox contract live here too: swarm injects
 //! them at hire time and dyson reads them at boot, and neither side can
@@ -15,8 +10,6 @@
 //! compiler.
 
 use std::path::{Component, Path};
-
-use serde::{Deserialize, Serialize};
 
 /// State-file namespaces.
 pub const STATE_NAMESPACE_WORKSPACE: &str = "workspace";
@@ -37,27 +30,6 @@ pub const ENV_PROXY_TOKEN: &str = "SWARM_PROXY_TOKEN";
 pub const ENV_INSTANCE_ID: &str = "SWARM_INSTANCE_ID";
 pub const ENV_STATE_SYNC_URL: &str = "SWARM_STATE_SYNC_URL";
 pub const ENV_STATE_SYNC_TOKEN: &str = "SWARM_STATE_SYNC_TOKEN";
-
-/// One mirrored file change on the wire. Serialized by dyson's state
-/// sync worker, deserialized by swarm's internal-state route — one
-/// struct so a field rename can never split the two sides.
-///
-/// `deleted`/`body_b64`/`mime` keep `#[serde(default)]` for
-/// compatibility with older senders; `deleted: true` + `body_b64:
-/// None` is a tombstone.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StateFileEnvelope {
-    pub namespace: String,
-    pub path: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mime: Option<String>,
-    #[serde(default)]
-    pub updated_at: i64,
-    #[serde(default)]
-    pub deleted: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub body_b64: Option<String>,
-}
 
 /// Is `path` (relative, within `namespace`) durable state that dyson
 /// must push and swarm must accept?
@@ -217,28 +189,5 @@ mod tests {
             "c1/title.txt",
             b""
         ));
-    }
-
-    #[test]
-    fn envelope_round_trips_and_tolerates_missing_optionals() {
-        let e = StateFileEnvelope {
-            namespace: STATE_NAMESPACE_CHATS.into(),
-            path: "c1/transcript.json".into(),
-            mime: Some("application/json".into()),
-            updated_at: 123,
-            deleted: false,
-            body_b64: Some("W10=".into()),
-        };
-        let json = serde_json::to_string(&e).unwrap();
-        let back: StateFileEnvelope = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.path, e.path);
-        assert_eq!(back.body_b64, e.body_b64);
-
-        let tombstone: StateFileEnvelope = serde_json::from_str(
-            r#"{"namespace":"chats","path":"c1/transcript.json","updated_at":1,"deleted":true}"#,
-        )
-        .unwrap();
-        assert!(tombstone.deleted);
-        assert!(tombstone.body_b64.is_none());
     }
 }

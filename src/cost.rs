@@ -91,7 +91,7 @@ mod tests {
 
     #[test]
     fn deserializes_when_reconciliation_fields_absent() {
-        // A producer that predates the OpenRouter columns still deserializes.
+        // Serializers omit reconciliation fields that have no value.
         let json = r#"{
             "audit_id": 7, "instance_id": "i", "provider": "openrouter",
             "model": null, "key_source": "shared", "status_code": 200,

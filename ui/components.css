@@ -95,7 +95,7 @@
   width: min(620px, 96vw);
   max-height: min(760px, 92vh);
   overflow: auto;
-  border: 1px solid var(--line-2, var(--border));
+  border: 1px solid var(--border, var(--border));
   border-radius: 10px;
   color: var(--fg);
   background: var(--bg-1);
@@ -106,8 +106,8 @@
   --subscription-tone-wash: color-mix(in srgb, var(--accent) 8%, var(--bg-2));
 }
 .modal.subscription-connect-claude {
-  --subscription-tone: var(--sub, #d97757);
-  --subscription-tone-wash: color-mix(in srgb, var(--sub, #d97757) 8%, var(--bg-2));
+  --subscription-tone: var(--fg-muted, #d97757);
+  --subscription-tone-wash: color-mix(in srgb, var(--fg-muted, #d97757) 8%, var(--bg-2));
 }
 .modal.subscription-connect-deepseek {
   --subscription-tone: #5786fe;
@@ -119,15 +119,15 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--line, var(--border));
-  background: var(--panel, var(--bg-2));
+  border-bottom: 1px solid var(--border, var(--border));
+  background: var(--bg-1, var(--bg-2));
 }
 .subscription-connect-brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: var(--mute-2, var(--fg-muted));
-  font: 600 10px/1 var(--font-mono, var(--mono));
+  color: var(--fg-faint, var(--fg-muted));
+  font: 600 10px/1 var(--mono, var(--mono));
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -140,7 +140,7 @@
   border-radius: 5px;
   color: var(--subscription-tone);
   background: var(--subscription-tone-wash);
-  font: 700 9px/1 var(--font-mono, var(--mono));
+  font: 700 9px/1 var(--mono, var(--mono));
   letter-spacing: 0.07em;
 }
 .subscription-backend-mark {
@@ -157,35 +157,35 @@
   place-items: center;
   border: 1px solid transparent;
   border-radius: 4px;
-  color: var(--mute, var(--fg-muted));
+  color: var(--fg-muted, var(--fg-muted));
   background: transparent;
-  font: 400 20px/1 var(--font-ui, var(--sans));
+  font: 400 20px/1 var(--sans, var(--sans));
   cursor: pointer;
 }
 .subscription-connect-close:hover {
   color: var(--fg);
-  border-color: var(--line, var(--border));
-  background: var(--panel-2, var(--bg-2));
+  border-color: var(--border, var(--border));
+  background: var(--bg-2, var(--bg-2));
 }
 .subscription-connect-body { padding: 36px 38px 40px; }
 .subscription-connect-kicker {
   margin-bottom: 9px;
   color: var(--subscription-tone);
-  font: 700 10px/1 var(--font-mono, var(--mono));
+  font: 700 10px/1 var(--mono, var(--mono));
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 .subscription-connect-body h2 {
   margin: 0;
   color: var(--fg);
-  font: 650 28px/1.15 var(--font-ui, var(--sans));
+  font: 650 28px/1.15 var(--sans, var(--sans));
   letter-spacing: -0.025em;
 }
 .subscription-connect-lede {
   margin: 10px 0 22px;
   max-width: 470px;
-  color: var(--mute-2, var(--fg-muted));
-  font: 400 14px/1.55 var(--font-ui, var(--sans));
+  color: var(--fg-faint, var(--fg-muted));
+  font: 400 14px/1.55 var(--sans, var(--sans));
 }
 .subscription-privacy {
   display: flex;
@@ -193,9 +193,9 @@
   gap: 11px;
   margin-bottom: 25px;
   padding: 13px 14px;
-  border: 1px solid var(--line, var(--border));
+  border: 1px solid var(--border, var(--border));
   border-radius: 6px;
-  background: var(--panel, var(--bg-2));
+  background: var(--bg-1, var(--bg-2));
 }
 .subscription-privacy-mark {
   width: 19px;
@@ -212,17 +212,17 @@
 }
 .subscription-privacy strong,
 .subscription-privacy span { display: block; }
-.subscription-privacy strong { color: var(--fg-dim, var(--fg)); font-size: 12.5px; }
+.subscription-privacy strong { color: var(--fg-faint, var(--fg)); font-size: 12.5px; }
 .subscription-privacy div > span {
   margin-top: 3px;
-  color: var(--mute, var(--fg-muted));
+  color: var(--fg-muted, var(--fg-muted));
   font-size: 11.5px;
 }
 .subscription-connect-flow {
   overflow: hidden;
-  border: 1px solid var(--line, var(--border));
+  border: 1px solid var(--border, var(--border));
   border-radius: 7px;
-  background: var(--panel, var(--bg-2));
+  background: var(--bg-1, var(--bg-2));
 }
 .subscription-step {
   min-height: 78px;
@@ -232,17 +232,17 @@
   align-items: center;
   gap: 12px;
 }
-.subscription-step + .subscription-step { border-top: 1px solid var(--line, var(--border)); }
+.subscription-step + .subscription-step { border-top: 1px solid var(--border, var(--border)); }
 .subscription-step-number {
   width: 24px;
   height: 24px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--line-2, var(--border));
+  border: 1px solid var(--border, var(--border));
   border-radius: 4px;
-  color: var(--fg-dim, var(--fg));
+  color: var(--fg-faint, var(--fg));
   background: var(--bg-1);
-  font: 700 10px/1 var(--font-mono, var(--mono));
+  font: 700 10px/1 var(--mono, var(--mono));
 }
 .subscription-step strong,
 .subscription-step div > span,
@@ -251,7 +251,7 @@
 .subscription-step div > span,
 .subscription-step label > span {
   margin-top: 4px;
-  color: var(--mute, var(--fg-muted));
+  color: var(--fg-muted, var(--fg-muted));
   font-size: 11px;
 }
 .subscription-connect-action {
@@ -263,7 +263,7 @@
   gap: 5px;
   border: 1px solid var(--subscription-tone);
   border-radius: var(--radius);
-  font: 600 12px/1 var(--font-ui, var(--sans));
+  font: 600 12px/1 var(--sans, var(--sans));
   text-decoration: none;
   cursor: pointer;
 }
@@ -287,12 +287,12 @@
   cursor: pointer;
 }
 .subscription-code-value {
-  font: 600 14px/1 var(--font-mono, var(--mono));
+  font: 600 14px/1 var(--mono, var(--mono));
   letter-spacing: 0.1em;
 }
 .subscription-device-code > span:last-child {
   color: var(--subscription-tone);
-  font: 700 9px/1 var(--font-mono, var(--mono));
+  font: 700 9px/1 var(--mono, var(--mono));
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -302,21 +302,21 @@
   height: 36px;
   margin-top: 10px;
   padding: 0 10px;
-  border: 1px solid var(--line-2, var(--border));
+  border: 1px solid var(--border, var(--border));
   border-radius: 4px;
   color: var(--fg);
   background: var(--bg-1);
-  font: 500 11px/1 var(--font-mono, var(--mono));
+  font: 500 11px/1 var(--mono, var(--mono));
 }
 .subscription-starting {
   display: flex;
   align-items: center;
   gap: 9px;
   padding: 18px;
-  border: 1px solid var(--line, var(--border));
+  border: 1px solid var(--border, var(--border));
   border-radius: 6px;
-  color: var(--mute-2, var(--fg-muted));
-  background: var(--panel, var(--bg-2));
+  color: var(--fg-faint, var(--fg-muted));
+  background: var(--bg-1, var(--bg-2));
   font-size: 12px;
 }
 .subscription-starting > span {

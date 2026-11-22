@@ -17,7 +17,7 @@ dependencies are feature-gated:
 
 ### Modules (`lib.rs`)
 
-- Always compiled: `auth`, `contracts`, `cost`, `date`, `feedback`, `jsonrpc`, `marketplace`, `net`, `oauth`, `security_tester`, `state_sync`, `telegram_media`, `tokens`, `ui`, `util` [lib.rs]
+- Always compiled: `auth`, `contracts`, `cost`, `date`, `feedback`, `jsonrpc`, `marketplace`, `net`, `oauth`, `security_tester`, `state_sync`, `tokens`, `ui`, `util` [lib.rs]
 - `glitch_scope`: only with `#[cfg(feature = "glitch-scope")]` [lib.rs]
 - `oidc`: only with `#[cfg(feature = "oidc")]` [lib.rs]
 - `oauth`: OAuth / MCP-auth DTOs and the feature-gated client. See [./oauth/EGM.md](./oauth/EGM.md)
@@ -108,14 +108,10 @@ dependencies are feature-gated:
 
 - `STATE_NAMESPACE_WORKSPACE` and `STATE_NAMESPACE_CHATS` [state_sync.rs:STATE_NAMESPACE_WORKSPACE]
 - Sandbox env var names: `ENV_PROXY_URL`, `ENV_PROXY_TOKEN`, `ENV_INSTANCE_ID`, `ENV_STATE_SYNC_URL`, `ENV_STATE_SYNC_TOKEN` [state_sync.rs:ENV_PROXY_URL]
-- `StateFileEnvelope` [state_sync.rs:StateFileEnvelope]
 - `is_durable_state_path` [state_sync.rs:is_durable_state_path]
 - `has_hidden_or_unclean_component` [state_sync.rs:has_hidden_or_unclean_component]
 - `is_zero_byte_chat_transcript` [state_sync.rs:is_zero_byte_chat_transcript]
 
-### Telegram media (`telegram_media.rs`)
-
-- Compatibility re-export of `dyson_telegram::media::*`. New consumers should depend on `dyson-telegram` (see [../telegram/EGM.md](../telegram/EGM.md)) [telegram_media.rs]
 
 ### UI theme (`ui.rs`)
 

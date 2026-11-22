@@ -145,11 +145,8 @@ pub struct InstanceStatus {
     pub runnable_intents: u32,
     pub budget_stop: bool,
     pub expires_unix_ms: u64,
-    /// What this Glitch build says it is. Absent from releases that predate
-    /// self-reporting, so Swarm must treat `None` as "unknown", never as a
-    /// match.
-    #[serde(default)]
-    pub release: Option<ReleaseIdentity>,
+    /// Self-reported build identity.
+    pub release: ReleaseIdentity,
 }
 
 /// A Glitch build's self-reported identity. `version` and `commit` are baked
@@ -196,15 +193,12 @@ mod tests {
     }
 
     #[test]
-    fn status_release_is_optional_and_closed() {
+    fn status_release_is_required_and_closed() {
         let old = r#"{"api_version":1,"instance_id":"i","state":"observe_ready","active_engagements":0,"pending_approvals":0,"runnable_intents":0,"budget_stop":false,"expires_unix_ms":1}"#;
-        assert_eq!(
-            serde_json::from_str::<InstanceStatus>(old).unwrap().release,
-            None
-        );
+        assert!(serde_json::from_str::<InstanceStatus>(old).is_err());
         let new = r#"{"api_version":1,"instance_id":"i","state":"observe_ready","active_engagements":0,"pending_approvals":0,"runnable_intents":0,"budget_stop":false,"expires_unix_ms":1,"release":{"version":"0.1.0","commit":"abc1234","image_digest":"sha256:00"}}"#;
         let status = serde_json::from_str::<InstanceStatus>(new).unwrap();
-        assert_eq!(status.release.unwrap().commit, "abc1234");
+        assert_eq!(status.release.commit, "abc1234");
         let extra = r#"{"api_version":1,"instance_id":"i","state":"observe_ready","active_engagements":0,"pending_approvals":0,"runnable_intents":0,"budget_stop":false,"expires_unix_ms":1,"release":{"version":"0.1.0","commit":"abc1234","image_digest":null,"signed":true}}"#;
         assert!(serde_json::from_str::<InstanceStatus>(extra).is_err());
     }
