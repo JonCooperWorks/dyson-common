@@ -91,38 +91,107 @@ pub(super) enum ChatEvent {
     Usage(UsageTokens),
 }
 
+/// The most an upstream may send without ending an event. Past it the
+/// stream is failed rather than buffered on: an upstream that never sends a
+/// blank line would otherwise grow the buffer until memory runs out. Chat
+/// chunks are a few hundred bytes; this is room for any real one.
+pub(super) const MAX_SSE_EVENT_BYTES: usize = 1024 * 1024;
+
 /// Incremental parser for an OpenAI Chat Completions SSE stream.
 ///
-/// Splits on the SSE event delimiter (`\n\n`), pulls the `data:` payload of
+/// Splits on the SSE event delimiter (a blank line, with lines ended by
+/// `\n`, `\r\n` or `\r` as the SSE spec allows), pulls the `data:` payload of
 /// each event, and decodes it to zero or more [`ChatEvent`]s. Partial events
-/// are buffered until their delimiter arrives, so a chunk boundary anywhere in
-/// the byte stream is handled correctly.
+/// are buffered (as bytes, so a UTF-8 character split across chunks is
+/// whole again) until their delimiter arrives, so a chunk boundary anywhere
+/// in the byte stream is handled correctly. More than
+/// [`MAX_SSE_EVENT_BYTES`] without a delimiter [overflows](Self::overflowed)
+/// the parser: the buffer is dropped and nothing more is decoded.
 #[derive(Default)]
 pub(super) struct OpenAiSseParser {
-    buffer: String,
+    buffer: Vec<u8>,
+    /// Where the scan for a delimiter stopped, and where the line it
+    /// stopped in began, so each byte is looked at once.
+    scanned: usize,
+    line_start: usize,
+    overflowed: bool,
 }
 
 impl OpenAiSseParser {
     pub(super) fn feed(&mut self, chunk: &[u8]) -> Vec<ChatEvent> {
-        // A multi-byte UTF-8 character can split across a chunk boundary. That
-        // is rare for these SSE payloads, and any mangled character only ever
-        // corrupts cosmetic display text — never billing, which is metered off
-        // the untranslated upstream bytes in `RecordingBody`.
-        self.buffer.push_str(&String::from_utf8_lossy(chunk));
         let mut out = Vec::new();
-        while let Some(idx) = self.buffer.find("\n\n") {
-            let event: String = self.buffer[..idx].to_owned();
-            self.buffer.drain(..idx + 2);
-            decode_event(&event, &mut out);
+        if self.overflowed {
+            return out;
+        }
+        self.buffer.extend_from_slice(chunk);
+        let mut consumed = 0;
+        while let Some((event_end, next)) = self.next_event(consumed) {
+            decode_event(
+                &String::from_utf8_lossy(&self.buffer[consumed..event_end]),
+                &mut out,
+            );
+            consumed = next;
+            self.scanned = next;
+            self.line_start = next;
+        }
+        self.buffer.drain(..consumed);
+        self.scanned -= consumed;
+        self.line_start -= consumed;
+        if self.buffer.len() > MAX_SSE_EVENT_BYTES {
+            self.overflowed = true;
+            self.buffer = Vec::new();
+            self.scanned = 0;
+            self.line_start = 0;
         }
         out
+    }
+
+    /// The end of the event that starts at `from`, and where the next one
+    /// starts, when its blank line has arrived.
+    fn next_event(&mut self, from: usize) -> Option<(usize, usize)> {
+        let buf = &self.buffer;
+        let mut i = self.scanned.max(from);
+        let mut line_start = self.line_start.max(from);
+        while i < buf.len() {
+            let eol = match buf[i] {
+                b'\n' => 1,
+                b'\r' => match buf.get(i + 1) {
+                    Some(b'\n') => 2,
+                    Some(_) => 1,
+                    // A `\r` last: wait to see whether a `\n` follows.
+                    None => break,
+                },
+                _ => {
+                    i += 1;
+                    continue;
+                }
+            };
+            if i == line_start && line_start > from {
+                // An empty line after the event's last one.
+                self.scanned = i;
+                self.line_start = line_start;
+                return Some((line_start, i + eol));
+            }
+            i += eol;
+            line_start = i;
+        }
+        self.scanned = i;
+        self.line_start = line_start;
+        None
+    }
+
+    /// Whether more than [`MAX_SSE_EVENT_BYTES`] arrived without an event
+    /// ending: the stream is to be failed.
+    pub(super) fn overflowed(&self) -> bool {
+        self.overflowed
     }
 
     pub(super) fn finish(&mut self) -> Vec<ChatEvent> {
         let mut out = Vec::new();
         let rest = std::mem::take(&mut self.buffer);
-        if !rest.trim().is_empty() {
-            decode_event(&rest, &mut out);
+        (self.scanned, self.line_start) = (0, 0);
+        if !self.overflowed && !rest.trim_ascii().is_empty() {
+            decode_event(&String::from_utf8_lossy(&rest), &mut out);
         }
         out
     }
@@ -132,7 +201,7 @@ fn decode_event(event: &str, out: &mut Vec<ChatEvent>) {
     // Concatenate the `data:` lines of one SSE event (OpenAI uses a single
     // data line per event, but be tolerant of multi-line data).
     let mut payload = String::new();
-    for line in event.lines() {
+    for line in event.split(['\r', '\n']) {
         let line = line.trim_start();
         if let Some(data) = line.strip_prefix("data:") {
             let data = data.trim();
@@ -320,6 +389,84 @@ mod tests {
                 ChatEvent::Finish(FinishReason::Stop),
             ]
         );
+    }
+
+    #[test]
+    fn parses_crlf_and_cr_delimited_events() {
+        let text = |t: &str| {
+            format!(
+                "data: {{\"choices\":[{{\"delta\":{{\"content\":\"{t}\"}},\"finish_reason\":null}}]}}"
+            )
+        };
+        let expected = vec![
+            ChatEvent::TextDelta("a".into()),
+            ChatEvent::TextDelta("b".into()),
+            ChatEvent::TextDelta("c".into()),
+        ];
+        for eol in ["\r\n", "\r", "\n"] {
+            let sse = format!(
+                ": comment{eol}{}{eol}{eol}{}{eol}{eol}{}{eol}{eol}data: [DONE]{eol}{eol}",
+                text("a"),
+                text("b"),
+                text("c")
+            );
+            // Whole, and one byte at a time (a `\r\n` split across chunks).
+            let mut p = OpenAiSseParser::default();
+            let mut events = p.feed(sse.as_bytes());
+            assert!(p.finish().is_empty());
+            assert_eq!(events, expected, "{eol:?}");
+            let mut p = OpenAiSseParser::default();
+            events = sse.as_bytes().chunks(1).flat_map(|b| p.feed(b)).collect();
+            events.extend(p.finish());
+            assert_eq!(events, expected, "{eol:?} byte by byte");
+        }
+        // Mixed endings, and events delivered before the stream ends.
+        let mut p = OpenAiSseParser::default();
+        let sse = format!("{}\r\n\n{}\n\r\n", text("a"), text("b"));
+        assert_eq!(p.feed(sse.as_bytes()), expected[..2]);
+    }
+
+    #[test]
+    fn a_character_split_across_chunks_is_whole() {
+        let sse = "data: {\"choices\":[{\"delta\":{\"content\":\"h\u{e9}llo\"},\"finish_reason\":null}]}\n\n";
+        let mut p = OpenAiSseParser::default();
+        let events: Vec<_> = sse.as_bytes().chunks(1).flat_map(|b| p.feed(b)).collect();
+        assert_eq!(events, vec![ChatEvent::TextDelta("h\u{e9}llo".into())]);
+    }
+
+    #[test]
+    fn an_event_that_never_ends_overflows_instead_of_growing() {
+        let mut p = OpenAiSseParser::default();
+        let head = p.feed(b"data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":null}]}\n\ndata: \"");
+        assert_eq!(head, vec![ChatEvent::TextDelta("ok".into())]);
+        let filler = vec![b'a'; 64 * 1024];
+        let mut fed = 0;
+        while !p.overflowed() {
+            assert!(p.feed(&filler).is_empty());
+            fed += filler.len();
+            assert!(
+                fed <= MAX_SSE_EVENT_BYTES + filler.len(),
+                "never overflowed"
+            );
+        }
+        assert!(p.buffer.capacity() == 0, "the buffer is let go");
+        // Nothing more is read, even a well-formed event.
+        assert!(
+            p.feed(b"\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n\n")
+                .is_empty()
+        );
+        assert!(p.finish().is_empty());
+        // Up to the cap is fine.
+        let mut p = OpenAiSseParser::default();
+        let big = format!(
+            "data: {{\"choices\":[{{\"delta\":{{\"content\":\"{}\"}},\"finish_reason\":null}}]}}",
+            "b".repeat(MAX_SSE_EVENT_BYTES - 100)
+        );
+        for chunk in big.as_bytes().chunks(4096) {
+            assert!(p.feed(chunk).is_empty());
+        }
+        assert!(!p.overflowed());
+        assert_eq!(p.feed(b"\n\n").len(), 1);
     }
 
     #[test]

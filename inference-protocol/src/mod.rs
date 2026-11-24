@@ -290,6 +290,20 @@ impl ResponseTranslator {
     fn finish(&mut self) -> Vec<u8> {
         self.encoder.finish()
     }
+
+    /// Why the stream must be failed, once it must: the upstream sent more
+    /// than [`openai::MAX_SSE_EVENT_BYTES`] without ending an event.
+    fn failure(&self) -> Option<std::io::Error> {
+        self.encoder.overflowed().then(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "upstream sent more than {} bytes without ending an SSE event",
+                    openai::MAX_SSE_EVENT_BYTES
+                ),
+            )
+        })
+    }
 }
 
 /// Re-encodes upstream OpenAI bytes into a target dialect. `feed` handles a
@@ -298,6 +312,11 @@ impl ResponseTranslator {
 trait Encoder: Send {
     fn feed(&mut self, chunk: &[u8]) -> Vec<u8>;
     fn finish(&mut self) -> Vec<u8>;
+    /// Whether the upstream stream can no longer be parsed (see
+    /// [`OpenAiSseParser::overflowed`]).
+    fn overflowed(&self) -> bool {
+        false
+    }
 }
 
 struct PassthroughEncoder;
@@ -328,6 +347,10 @@ impl AnthropicStreamEncoder {
 }
 
 impl Encoder for AnthropicStreamEncoder {
+    fn overflowed(&self) -> bool {
+        self.parser.overflowed()
+    }
+
     fn feed(&mut self, chunk: &[u8]) -> Vec<u8> {
         let mut out = String::new();
         for e in self.parser.feed(chunk) {
@@ -373,6 +396,10 @@ impl ResponsesStreamEncoder {
 }
 
 impl Encoder for ResponsesStreamEncoder {
+    fn overflowed(&self) -> bool {
+        self.parser.overflowed()
+    }
+
     fn feed(&mut self, chunk: &[u8]) -> Vec<u8> {
         let mut out = String::new();
         for mut e in self.parser.feed(chunk) {
@@ -512,6 +539,8 @@ pub struct TranslatingStream {
     inner: Pin<Box<dyn Stream<Item = Result<Bytes, std::io::Error>> + Send>>,
     translator: ResponseTranslator,
     done: bool,
+    /// An error to end the stream with once what came before it is sent.
+    failed: Option<std::io::Error>,
 }
 
 impl TranslatingStream {
@@ -523,6 +552,7 @@ impl TranslatingStream {
             inner: Box::pin(inner),
             translator,
             done: false,
+            failed: None,
         }
     }
 }
@@ -533,6 +563,9 @@ impl Stream for TranslatingStream {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
         loop {
+            if let Some(e) = this.failed.take() {
+                return Poll::Ready(Some(Err(e)));
+            }
             if this.done {
                 return Poll::Ready(None);
             }
@@ -540,6 +573,15 @@ impl Stream for TranslatingStream {
                 Poll::Pending => return Poll::Pending,
                 Poll::Ready(Some(Ok(chunk))) => {
                     let out = this.translator.feed(&chunk);
+                    if let Some(e) = this.translator.failure() {
+                        // Fail the stream, after what was whole before it.
+                        this.done = true;
+                        if out.is_empty() {
+                            return Poll::Ready(Some(Err(e)));
+                        }
+                        this.failed = Some(e);
+                        return Poll::Ready(Some(Ok(Bytes::from(out))));
+                    }
                     if out.is_empty() {
                         // Buffered (non-streaming) encoders swallow chunks and
                         // flush at finish; keep pulling the upstream.
@@ -757,6 +799,37 @@ mod tests {
         assert!(text.contains("event: content_block_delta"));
         assert!(text.contains("\"text\":\"Hi\""));
         assert!(text.contains("event: message_stop"));
+    }
+
+    /// An upstream that never ends an event fails the stream, after what
+    /// came whole before it, for both streaming dialects.
+    #[tokio::test]
+    async fn translating_stream_fails_an_endless_event() {
+        for dialect in [Dialect::Anthropic, Dialect::Responses] {
+            let first = b"data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"},\"finish_reason\":null}]}\r\n\r\ndata: {\"x\":\"".to_vec();
+            let filler = vec![b'a'; 64 * 1024];
+            let chunks = std::iter::once(first)
+                .chain(std::iter::repeat_n(filler, 4 * 1024))
+                .map(|c| Ok::<Bytes, std::io::Error>(Bytes::from(c)));
+            let translator = ResponseTranslator::build(dialect, true, 200, "m");
+            let results: Vec<_> = TranslatingStream::new(futures::stream::iter(chunks), translator)
+                .collect()
+                .await;
+            let (ok, err): (Vec<_>, Vec<_>) = results.into_iter().partition(Result::is_ok);
+            let text = String::from_utf8(
+                ok.into_iter()
+                    .map(Result::unwrap)
+                    .collect::<Vec<_>>()
+                    .concat(),
+            )
+            .unwrap();
+            assert!(text.contains("Hi"), "{dialect:?}: {text}");
+            assert_eq!(err.len(), 1, "{dialect:?}");
+            let e = err.into_iter().next().unwrap().unwrap_err();
+            assert_eq!(e.kind(), std::io::ErrorKind::InvalidData);
+            // It stopped reading at the cap, not at the end of 256 MiB.
+            assert!(!text.contains("aaaa"), "{dialect:?}");
+        }
     }
 
     /// Non-streaming: a single OpenAI completion object buffered and re-encoded

@@ -82,9 +82,18 @@ pub fn validate(token: &str, prefix: &str) -> Result<(), BadToken> {
 macro_rules! typed_token {
     ($name:ident, $prefix:ident, $doc:expr) => {
         #[doc = $doc]
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, ::serde::Serialize)]
+        #[derive(Clone, PartialEq, Eq, Hash, ::serde::Serialize)]
         #[serde(transparent)]
         pub struct $name(String);
+
+        /// The kind and prefix only (`ProxyToken(pt_…)`): a token is a
+        /// bearer, and `Debug` is what ends up in logs and panic messages.
+        /// `Display` and [`as_str`](Self::as_str) give the wire form.
+        impl std::fmt::Debug for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}({}…)", stringify!($name), $prefix)
+            }
+        }
 
         impl $name {
             /// The wire prefix for this token kind.
@@ -158,6 +167,29 @@ typed_token!(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn debug_hides_the_body() {
+        let body = "0123456789abcdef0123456789abcdef";
+        let t = ProxyToken::parse(format!("pt_{body}")).unwrap();
+        let debug = format!("{t:?}");
+        assert_eq!(debug, "ProxyToken(pt_…)");
+        assert!(!debug.contains(body));
+        // Nested in a derived Debug too.
+        #[derive(Debug)]
+        #[allow(dead_code)]
+        struct Holder {
+            token: SessionToken,
+        }
+        let holder = Holder {
+            token: SessionToken::parse(format!("ses_{body}")).unwrap(),
+        };
+        assert!(!format!("{holder:?}").contains(body));
+        assert!(!format!("{holder:#?}").contains(body));
+        // The wire form is unchanged.
+        assert_eq!(t.to_string(), format!("pt_{body}"));
+        assert_eq!(t.as_str(), format!("pt_{body}"));
+    }
 
     #[test]
     fn parse_accepts_well_formed() {

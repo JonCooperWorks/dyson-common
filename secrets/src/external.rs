@@ -31,7 +31,6 @@ use std::{
     collections::HashSet,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::atomic::{AtomicU64, Ordering},
 };
 
 use base64::Engine;
@@ -44,8 +43,6 @@ pub use crate::hit::Extra;
 pub const SHORTEST: usize = 8;
 /// TruffleHog detectors left out by default, one a line (see the file).
 const TRUFFLEHOG_EXCLUDE: &str = include_str!("../rules/trufflehog-exclude.txt");
-
-static SCRATCH: AtomicU64 = AtomicU64::new(0);
 
 type Skip = Box<dyn Fn(&str) -> bool + Send + Sync>;
 
@@ -146,7 +143,7 @@ impl External {
             ("noseyparker", "--version"),
         ] {
             let out = self
-                .command(name, &home.0)
+                .command(name, home.path())
                 .arg(arg)
                 .output()
                 .map_err(err(format_args!("run {}", self.program(name).display())))?;
@@ -173,7 +170,7 @@ impl External {
             return Ok(found);
         }
         let scratch = Scratch::new()?;
-        let home = scratch.0.as_path();
+        let home = scratch.path();
         let files = home.join("texts");
         for (i, text) in texts.iter().enumerate() {
             if text.trim().len() >= SHORTEST {
@@ -445,32 +442,32 @@ impl External {
     }
 }
 
-/// A scratch directory, removed when dropped.
-struct Scratch(PathBuf);
+/// A scratch directory, removed when dropped: made new under a random
+/// name, only ever by us, readable only by us.
+struct Scratch(tempfile::TempDir);
 
 impl Scratch {
     fn new() -> Result<Self, Error> {
-        let path = std::env::temp_dir().join(format!(
-            "dyson-secrets-{}-{}",
-            std::process::id(),
-            SCRATCH.fetch_add(1, Ordering::Relaxed)
-        ));
-        let _ = std::fs::remove_dir_all(&path);
-        std::fs::create_dir_all(path.join("texts"))
-            .map_err(err(format_args!("make {}", path.display())))?;
+        // `tempdir` makes the directory itself (it never takes one that
+        // exists) under a name nobody can guess ahead, and on Unix makes
+        // it 0700 as it makes it.
+        let mut builder = tempfile::Builder::new();
+        builder.prefix("dyson-secrets-");
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700))
-                .map_err(err("keep the scratch directory private"))?;
+            builder.permissions(std::fs::Permissions::from_mode(0o700));
         }
-        Ok(Self(path))
+        let dir = builder
+            .tempdir()
+            .map_err(err("make the scratch directory"))?;
+        std::fs::create_dir(dir.path().join("texts"))
+            .map_err(err(format_args!("make {}", dir.path().display())))?;
+        Ok(Self(dir))
     }
-}
 
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+    fn path(&self) -> &Path {
+        self.0.path()
     }
 }
 
@@ -526,6 +523,28 @@ fn tail(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_scratch_directory_is_new_private_and_unguessable() {
+        let (a, b) = (Scratch::new().unwrap(), Scratch::new().unwrap());
+        assert_ne!(a.path(), b.path());
+        let name = a.path().file_name().unwrap().to_str().unwrap().to_owned();
+        // Not the old `dyson-secrets-<pid>-<counter>`, which another local
+        // user could make first and have used.
+        let pid = format!("dyson-secrets-{}-", std::process::id());
+        assert!(name.starts_with("dyson-secrets-"), "{name}");
+        assert!(!name.starts_with(&pid), "{name}");
+        assert!(a.path().join("texts").is_dir());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(a.path()).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o700, "{mode:o}");
+        }
+        let path = a.path().to_owned();
+        drop(a);
+        assert!(!path.exists());
+    }
 
     #[test]
     fn a_value_is_placed_by_itself_else_by_its_line() {

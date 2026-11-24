@@ -1,6 +1,6 @@
 [package]
 name = "dyson-common"
-version = "0.1.13"
+version = "0.1.14"
 edition = "2024"
 license = "MIT"
 description = "Shared wire contracts and primitives for dyson and dyson-swarm (tokens, OAuth/MCP-auth, cost, feedback, skill-marketplace)."
@@ -9,6 +9,10 @@ repository = "https://github.com/JonCooperWorks/dyson-common"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# WHATWG URL parsing for `net::host_from_url`, so the host checked is the
+# host reqwest connects to. reqwest already depends on it.
+url = "2"
 
 # Constant-time secret comparison (ct_eq_bytes/ct_eq_str). Tiny, no-std-friendly,
 # already a transitive dep of both consumers.
@@ -30,14 +34,13 @@ jsonwebtoken = { version = "10.4", optional = true, default-features = false, fe
 # with this one implementation and must agree on its digest.
 ipnet = { version = "2", optional = true, features = ["serde"] }
 thiserror = { version = "2", optional = true }
-url = { version = "2", optional = true, features = ["serde"] }
 uuid = { version = "1", optional = true, features = ["v4"] }
 
 [features]
 default = []
 oauth-client = ["dep:reqwest", "dep:base64", "dep:rand", "dep:sha2"]
 oidc = ["dep:jsonwebtoken"]
-glitch-scope = ["dep:ipnet", "dep:sha2", "dep:thiserror", "dep:url", "dep:uuid"]
+glitch-scope = ["dep:ipnet", "dep:sha2", "dep:thiserror", "url/serde", "dep:uuid"]
 
 [workspace]
 members = ["telegram", "inference-protocol", "secrets", "traces", "services", "cloudflare"]

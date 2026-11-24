@@ -237,13 +237,18 @@ impl Scanner {
 /// Kingfisher's importer reads Betterleaks rules from a file, so the
 /// embedded copy is written out once.
 fn generic_rules() -> Result<Rules, Error> {
-    let path =
-        std::env::temp_dir().join(format!("dyson-secrets-rules-{}.toml", std::process::id()));
-    std::fs::write(&path, GENERIC_RULES)
+    // A new file under a random name (never one someone else made first
+    // at a name they could guess), removed when dropped.
+    let mut file = tempfile::Builder::new()
+        .prefix("dyson-secrets-rules-")
+        .suffix(".toml")
+        .tempfile()
+        .map_err(|e| Error(format!("make a file for the generic secret rules: {e}")))?;
+    std::io::Write::write_all(&mut file, GENERIC_RULES.as_bytes())
+        .and_then(|()| std::io::Write::flush(&mut file))
         .map_err(|e| Error(format!("write the generic secret rules: {e}")))?;
-    let rules = Rules::from_toml_file(&path, Confidence::Low);
-    let _ = std::fs::remove_file(&path);
-    rules.map_err(|e| Error(format!("load the generic secret rules: {e:#}")))
+    Rules::from_toml_file(file.path(), Confidence::Low)
+        .map_err(|e| Error(format!("load the generic secret rules: {e:#}")))
 }
 
 /// A card number or IBAN as a hit.

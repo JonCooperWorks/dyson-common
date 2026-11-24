@@ -312,11 +312,119 @@ pub fn tokens_in(document: &Value) -> HashSet<String> {
     found
 }
 
+/// What may stand around a token in a value a detector read it as: an
+/// assignment's name before it (`KEY=`, `"api_key": "`), and quotes,
+/// brackets, separators and space anywhere.
+static GLUE_BEFORE: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(
+        r#"^[\s"'`\\(\[{<,;]*(?:[A-Za-z_][A-Za-z0-9_.-]{0,63}["'`]?\s*[:=]\s*)?[\s"'`\\(\[{<,;]*$"#,
+    )
+    .expect("glue before")
+});
+static GLUE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r#"^[\s"'`\\()\[\]{}<>,;:=]*$"#).expect("glue"));
+
+/// Whether `value` is made of whole tokens with nothing between or around
+/// them but [glue](GLUE_BEFORE). `starts_outside` says whether the text
+/// before the first token is the value's own (and so may be a name).
+fn tokens_and_glue(value: &str, starts_outside: bool) -> bool {
+    let mut last = 0;
+    let mut any = false;
+    for token in TOKEN.find_iter(value) {
+        let between = &value[last..token.start()];
+        let glue = if last == 0 && starts_outside {
+            GLUE_BEFORE.is_match(between)
+        } else {
+            GLUE.is_match(between)
+        };
+        if !glue {
+            return false;
+        }
+        last = token.end();
+        any = true;
+    }
+    any && GLUE.is_match(&value[last..])
+}
+
 /// Whether what a detector found is a redaction token, or part of one, or
-/// something around one: nothing of a secret. `present` is what
-/// [`tokens_in`] found in the document scanned.
+/// one with only an assignment's name, quotes or separators around it:
+/// nothing of a secret. `present` is what [`tokens_in`] found in the
+/// document scanned.
+///
+/// Without the document this can only judge the value itself: a piece of
+/// a token counts only when it crosses one of the token's own `:`s (a rule
+/// name and its digest, or `REDACTED` and the rule), since a piece that
+/// does not may as well be a secret that happens to be spelled like part
+/// of a rule name. [`scrub`] judges by where the value is in the document
+/// instead (see [`is_token_in`]), and uses this only for a value that is
+/// in none of its strings verbatim.
 pub fn is_token(present: &HashSet<String>, value: &str) -> bool {
-    TOKEN.is_match(value) || present.iter().any(|token| token.contains(value))
+    tokens_and_glue(value, true)
+        || (value.contains(':') && present.iter().any(|token| token.contains(value)))
+}
+
+/// Whether every place `value` is written in `document` is inside a
+/// redaction token, or is a token with only [glue](GLUE_BEFORE) around it.
+/// `None` when it is written nowhere (a value a detector stitched together
+/// or decoded): see [`is_token`] for that.
+pub fn is_token_in(document: &Value, value: &str) -> Option<bool> {
+    if value.is_empty() {
+        return None;
+    }
+    let mut seen = false;
+    let mut all = true;
+    each_string(document, &mut |text| {
+        if !all || !text.contains(value) {
+            return;
+        }
+        let spans: Vec<(usize, usize)> = TOKEN
+            .find_iter(text)
+            .map(|token| (token.start(), token.end()))
+            .collect();
+        // Every occurrence, overlapping ones too.
+        let mut from = 0;
+        while let Some(at) = text.get(from..).and_then(|rest| rest.find(value)) {
+            let (start, end) = (from + at, from + at + value.len());
+            seen = true;
+            if !inside_tokens(text, &spans, start, end) {
+                all = false;
+                return;
+            }
+            from = start + text[start..].chars().next().map_or(1, char::len_utf8);
+        }
+    });
+    seen.then_some(all)
+}
+
+/// Every string value of a document, read in place. Keys are left.
+fn each_string(value: &Value, read: &mut impl FnMut(&str)) {
+    match value {
+        Value::String(text) => read(text),
+        Value::Array(items) => items.iter().for_each(|item| each_string(item, read)),
+        Value::Object(fields) => fields.values().for_each(|field| each_string(field, read)),
+        _ => {}
+    }
+}
+
+/// Whether `text[start..end]` is inside one token, or is whole tokens with
+/// only glue between and around them (a piece of a token at either end
+/// counts as part of it).
+fn inside_tokens(text: &str, spans: &[(usize, usize)], start: usize, end: usize) -> bool {
+    if spans.iter().any(|&(s, e)| s <= start && end <= e) {
+        return true;
+    }
+    // Widen the occurrence to the whole of any token it cuts into, then
+    // judge what is left around the tokens.
+    let (mut from, mut to) = (start, end);
+    for &(s, e) in spans {
+        if s < start && start < e {
+            from = s;
+        }
+        if s < end && end < e {
+            to = e;
+        }
+    }
+    tokens_and_glue(&text[from..to], from == start)
 }
 
 /// A secret a rescan found in a redacted document.
@@ -363,7 +471,10 @@ pub fn scrub<E>(
         let left: Vec<Leftover> = scan(document)?
             .into_iter()
             .filter(|found| found.value.trim().chars().count() >= SHORTEST)
-            .filter(|found| !is_token(&present, found.value.trim()))
+            .filter(|found| {
+                let value = found.value.trim();
+                !is_token_in(document, value).unwrap_or_else(|| is_token(&present, value))
+            })
             .collect();
         if left.is_empty() {
             return Ok(Scrubbed::Clean { redactions });
@@ -513,9 +624,96 @@ mod tests {
             "KEY=[REDACTED:generic-api-key:3fa9c1d2]"
         ));
         assert!(!is_token(&present, "sk-live-9f8e7d6c5b4a"));
+        assert!(is_token(
+            &present,
+            "\"api_key\": \"[REDACTED:generic-api-key:3fa9c1d2]\","
+        ));
         assert_eq!(label_token("endpoint"), "[REDACTED:endpoint]");
         assert!(TOKEN.is_match(&label_token("endpoint")));
         assert!(TOKEN.is_match(&token("x", &digest(KEY, "y"))));
+    }
+
+    #[test]
+    fn a_secret_beside_or_spelled_like_part_of_a_token_is_not_a_token() {
+        let present: HashSet<String> = ["[REDACTED:generic-api-key:3fa9c1d2]".to_owned()].into();
+        // Spelled like part of the rule name.
+        assert!(!is_token(&present, "generic-api"));
+        assert!(!is_token(&present, "api-key"));
+        // A secret with a token beside it is still a secret.
+        assert!(!is_token(
+            &present,
+            "sk-live-9f8e7d6c5b4a39281706[REDACTED:generic-api-key:3fa9c1d2]"
+        ));
+        assert!(!is_token(
+            &present,
+            "[REDACTED:generic-api-key:3fa9c1d2] sk-live-9f8e7d6c5b4a39281706"
+        ));
+        assert!(!is_token(
+            &present,
+            "[REDACTED:generic-api-key:3fa9c1d2]sk-live-9f8e7d6c5b4a"
+        ));
+    }
+
+    #[test]
+    fn a_rescan_finding_spelled_like_part_of_a_token_is_still_taken_out() {
+        // The secret is also a piece of a token's rule name: the old rule
+        // dropped it from the rescan because the token "contains" it.
+        let mut document = json!({
+            "m": "[REDACTED:generic-api-key:3fa9c1d2] and the password is generic-api"
+        });
+        let outcome = scrub(
+            &mut document,
+            &Redactor::default(),
+            3,
+            finds(&["generic-api"]),
+        );
+        assert!(
+            matches!(outcome, Ok(Scrubbed::Clean { redactions }) if redactions >= 1),
+            "{outcome:?}"
+        );
+        let text = document.to_string();
+        assert!(!text.contains("password is generic-api"), "{text}");
+
+        // And one with a token glued to it is taken out whole.
+        const GLUED: &str = concat!(
+            "sk-live-9f8e7d6c5b4a39281706",
+            "[REDACTED:generic-api-key:3fa9c1d2]"
+        );
+        let secret = "sk-live-9f8e7d6c5b4a39281706";
+        let mut document = json!({ "m": GLUED });
+        let outcome = scrub(&mut document, &Redactor::default(), 3, finds(&[GLUED]));
+        assert!(
+            matches!(outcome, Ok(Scrubbed::Clean { redactions: 1 })),
+            "{outcome:?}"
+        );
+        assert!(!document.to_string().contains(secret), "{document}");
+    }
+
+    #[test]
+    fn a_rescan_finding_inside_a_token_or_named_by_one_is_left() {
+        // A detector reading a token's digest, its rule and digest, or an
+        // assignment of it: all inside tokens, nothing taken out.
+        for value in [
+            "3fa9c1d2",
+            "generic-api-key:3fa9c1d2",
+            "REDACTED:generic-api-key",
+            "api_key=[REDACTED:generic-api-key:3fa9c1d2]",
+            "api_key=[REDACTED:generic-api-key",
+        ] {
+            let mut document = json!({
+                "m": "export api_key=[REDACTED:generic-api-key:3fa9c1d2]; done"
+            });
+            let before = document.clone();
+            let outcome = scrub(&mut document, &Redactor::default(), 3, |_: &Value| {
+                Ok::<_, ()>(vec![found(value, true)])
+            });
+            assert_eq!(outcome, Ok(Scrubbed::Clean { redactions: 0 }), "{value}");
+            assert_eq!(document, before, "{value}");
+        }
+        // Written both inside a token and outside one: outside wins.
+        let document = json!({"a": "[REDACTED:generic-api-key:3fa9c1d2]", "b": "3fa9c1d2"});
+        assert_eq!(is_token_in(&document, "3fa9c1d2"), Some(false));
+        assert_eq!(is_token_in(&document, "nowhere"), None);
     }
 
     fn found(value: &str, shown: bool) -> Leftover {

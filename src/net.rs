@@ -102,20 +102,42 @@ pub fn is_metadata_host(host: &str) -> bool {
 
 /// Extract the host from a URL: strips scheme, userinfo, path, query,
 /// fragment, and port; unwraps IPv6 brackets (`[::1]:8080` → `::1`).
-/// Returns `None` if there's no `://` scheme or the host is empty.
+///
+/// The URL is parsed the way reqwest parses it (WHATWG, via the `url`
+/// crate), so the host returned is the host a client connects to:
+/// `http://127.0.0.1?@example.com` is `127.0.0.1`, not `example.com`.
+/// The host is returned as written in `url` (its ASCII case kept), and
+/// only when what is written *is* that host. When the parser had to
+/// rewrite it to get there (percent-encoding, IDNA, tabs or newlines, the
+/// IPv4 shorthands `127.1` and `0x7f000001`, a backslash before the
+/// authority), the answer is `None`, as it is for no `://`, no host, an
+/// empty host or a URL that does not parse: callers deciding whether a
+/// request may go treat `None` as "refuse".
 pub fn host_from_url(url: &str) -> Option<&str> {
+    let parsed = url::Url::parse(url).ok()?;
     let after_scheme = &url[url.find("://")? + 3..];
-    let authority = after_scheme.split('/').next().unwrap_or(after_scheme);
+    // The authority ends where WHATWG ends it for the special schemes:
+    // at `/`, `\`, `?` or `#`. For any other scheme a `\` belongs to the
+    // authority, and the check against the parser below refuses it.
+    let authority = after_scheme
+        .split(['/', '\\', '?', '#'])
+        .next()
+        .unwrap_or(after_scheme);
     let host_port = authority.rsplit('@').next().unwrap_or(authority);
-    let host = if host_port.starts_with('[') {
-        host_port
-            .find(']')
-            .map(|i| &host_port[1..i])
-            .unwrap_or(host_port)
+    let written = if let Some(bracketed) = host_port.strip_prefix('[') {
+        &bracketed[..bracketed.find(']')?]
     } else {
         host_port.split(':').next().unwrap_or(host_port)
     };
-    if host.is_empty() { None } else { Some(host) }
+    if written.is_empty() {
+        return None;
+    }
+    let same = match parsed.host()? {
+        url::Host::Domain(domain) => written.eq_ignore_ascii_case(domain),
+        url::Host::Ipv4(ip) => written.parse::<Ipv4Addr>() == Ok(ip),
+        url::Host::Ipv6(ip) => written.parse::<Ipv6Addr>() == Ok(ip),
+    };
+    same.then_some(written)
 }
 
 #[cfg(test)]
@@ -176,6 +198,61 @@ mod tests {
         );
         assert_eq!(host_from_url("http://[::1]:8080/x"), Some("::1"));
         assert_eq!(host_from_url("no-scheme/path"), None);
+    }
+
+    /// The host is the one a WHATWG client (reqwest) connects to, never a
+    /// string a delimiter the old splitter ignored put after an `@`.
+    #[test]
+    fn host_from_url_agrees_with_whatwg() {
+        for (url, host) in [
+            // Query and fragment end the authority before the `@`.
+            ("http://127.0.0.1?@example.com", Some("127.0.0.1")),
+            ("http://127.0.0.1#@example.com", Some("127.0.0.1")),
+            ("http://127.0.0.1?x=1@example.com/", Some("127.0.0.1")),
+            // So does a backslash, for http(s).
+            ("http://127.0.0.1\\@example.com", Some("127.0.0.1")),
+            (
+                "https://example.com\\@169.254.169.254/",
+                Some("example.com"),
+            ),
+            // Userinfo, with and without a password, and an `@` inside it.
+            ("http://user@example.com/", Some("example.com")),
+            ("http://u:p@example.com:8080/", Some("example.com")),
+            ("http://a@b@example.com/", Some("example.com")),
+            ("http://example.com@127.0.0.1/", Some("127.0.0.1")),
+            // IPv6, with and without a port.
+            ("http://[::1]/", Some("::1")),
+            ("http://[fe80::1]:8080/x", Some("fe80::1")),
+            ("http://u@[::ffff:127.0.0.1]:1/", Some("::ffff:127.0.0.1")),
+            // Ports, and case kept as written.
+            ("https://Example.COM:8443", Some("Example.COM")),
+            ("http://10.0.0.1:80?q", Some("10.0.0.1")),
+            // Empty or missing hosts, and no scheme.
+            ("http://", None),
+            ("http:///x", None),
+            ("http://@/x", None),
+            ("http://:80/", None),
+            ("http://[]/", None),
+            ("example.com/path", None),
+            ("//example.com/", None),
+            ("", None),
+            // Rewritten by the parser: refused rather than guessed.
+            ("http://0x7f000001/", None),
+            ("http://127.1/", None),
+            ("http://2130706433/", None),
+            ("http://%31%32%37.0.0.1/", None),
+            ("http://exa\tmple.com/", None),
+            ("http://\\127.0.0.1/", None),
+            (
+                "http://xn--bcher-kva.example/",
+                Some("xn--bcher-kva.example"),
+            ),
+            ("http://bücher.example/", None),
+            // A bad port is not a URL at all.
+            ("http://example.com:99999/", None),
+        ] {
+            assert_eq!(host_from_url(url), host, "{url:?}");
+        }
     }
 
     #[test]
