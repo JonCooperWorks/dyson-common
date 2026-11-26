@@ -1,6 +1,6 @@
 {
   "name": "dyson-common-ui",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "private": false,
   "type": "module",
   "description": "Shared React UI primitives + design tokens for dyson and dyson-swarm. Ships pre-built ESM (dist/) so consumers import plain JS over a git dependency.",
@@ -15,6 +15,7 @@
   ],
   "exports": {
     ".": "./dist/index.js",
+    "./markdown": "./dist/markdown.js",
     "./tokens.css": "./ui/tokens.css",
     "./components.css": "./ui/components.css",
     "./vite": "./ui/vite.js",
@@ -22,7 +23,21 @@
   },
   "peerDependencies": {
     "react": ">=19",
-    "react-dom": ">=19"
+    "react-dom": ">=19",
+    "react-markdown": ">=10",
+    "remark-breaks": ">=4",
+    "remark-gfm": ">=4"
+  },
+  "peerDependenciesMeta": {
+    "react-markdown": {
+      "optional": true
+    },
+    "remark-breaks": {
+      "optional": true
+    },
+    "remark-gfm": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
@@ -32,10 +47,13 @@
     "jsdom": "^29.0.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "react-markdown": "^10.1.0",
+    "remark-breaks": "^4.0.0",
+    "remark-gfm": "^4.0.1",
     "vitest": "^4.1.5"
   },
   "scripts": {
-    "build": "esbuild ui/index.js --bundle --format=esm --jsx=transform --external:react --external:react-dom --outfile=dist/index.js",
+    "build": "esbuild ui/index.js --bundle --format=esm --jsx=transform --external:react --external:react-dom --define:process.env.NODE_ENV=process.env.NODE_ENV --outfile=dist/index.js && esbuild ui/markdown.js --bundle --format=esm --jsx=transform --external:react --external:react-dom --define:process.env.NODE_ENV=process.env.NODE_ENV --external:react-markdown --external:remark-gfm --external:remark-breaks --outfile=dist/markdown.js",
     "test": "vitest run",
     "prepublishOnly": "npm run build"
   }

@@ -3,7 +3,22 @@
  * Built for React's useSyncExternalStore: one frozen snapshot, listeners
  * fire synchronously on change, reducers that return the same reference
  * short-circuit (no allocation, no notification).
+ *
+ * Snapshots are deep-frozen in development and tests, where a mutation
+ * in place should throw; a production build skips the walk (every
+ * dispatch would otherwise visit the whole state). `{ freeze }` overrides.
  */
+
+// Bundlers (Vite, esbuild) replace `process.env.NODE_ENV` with a literal,
+// so this folds to a constant in a production build. Without a bundler
+// `process` is undefined and nothing is frozen.
+function freezeByDefault() {
+  try {
+    return process.env.NODE_ENV !== 'production';
+  } catch {
+    return false;
+  }
+}
 
 export function deepFreeze(obj) {
   if (obj === null || typeof obj !== 'object') return obj;
@@ -16,8 +31,9 @@ export function deepFreeze(obj) {
   return obj;
 }
 
-export function createStore(initial) {
-  let snapshot = deepFreeze(initial);
+export function createStore(initial, { freeze = freezeByDefault() } = {}) {
+  const settle = freeze ? deepFreeze : (value) => value;
+  let snapshot = settle(initial);
   const listeners = new Set();
 
   const getSnapshot = () => snapshot;
@@ -33,7 +49,7 @@ export function createStore(initial) {
   const dispatch = (reducer) => {
     const next = reducer(snapshot);
     if (next === snapshot) return;
-    snapshot = deepFreeze(next);
+    snapshot = settle(next);
     for (const fn of listeners) fn();
   };
 

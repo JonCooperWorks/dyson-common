@@ -8,7 +8,9 @@
 //!
 //! `is_private_v4`/`is_private_v6` are the union of both repos' prior
 //! hand-rolled checks (RFC1918, loopback, link-local, broadcast, multicast,
-//! unspecified, RFC 6598 CGNAT, 0.0.0.0/8, class-E 240/4, ULA, v4-mapped v6).
+//! unspecified, RFC 6598 CGNAT, 0.0.0.0/8, class-E 240/4, ULA, site-local
+//! fec0::/10, and the IPv6 forms that embed an internal v4: v4-mapped,
+//! v4-compatible and NAT64 64:ff9b::/96, plus all of local-use NAT64).
 
 use std::net::{Ipv4Addr, Ipv6Addr};
 
@@ -39,8 +41,24 @@ pub fn is_private_v6(ip: Ipv6Addr) -> bool {
         || (seg[0] & 0xfe00) == 0xfc00
         // Link-local: fe80::/10
         || (seg[0] & 0xffc0) == 0xfe80
+        // Deprecated site-local: fec0::/10
+        || (seg[0] & 0xffc0) == 0xfec0
         // IPv4-mapped IPv6 → check the embedded v4.
         || matches!(ip.to_ipv4_mapped(), Some(v4) if is_private_v4(v4))
+        // IPv4-compatible ::a.b.c.d (deprecated) → the embedded v4.
+        || (seg[..6] == [0, 0, 0, 0, 0, 0] && is_private_v4(embedded_v4(&seg)))
+        // NAT64 well-known prefix 64:ff9b::/96 → the v4 it translates to.
+        || (seg[..6] == [0x64, 0xff9b, 0, 0, 0, 0] && is_private_v4(embedded_v4(&seg)))
+        // Local-use NAT64 64:ff9b:1::/48 (RFC 8215): where it leads is
+        // site-defined, so all of it.
+        || (seg[..3] == [0x64, 0xff9b, 1])
+}
+
+/// The IPv4 address in the low 32 bits of an IPv6 address.
+fn embedded_v4(seg: &[u16; 8]) -> Ipv4Addr {
+    let [a, b] = seg[6].to_be_bytes();
+    let [c, d] = seg[7].to_be_bytes();
+    Ipv4Addr::new(a, b, c, d)
 }
 
 /// Whether an address is ordinary public unicast that an operator-declared
@@ -184,6 +202,34 @@ mod tests {
             );
         }
         assert!(!is_private_v6("2606:4700:4700::1111".parse().unwrap()));
+    }
+
+    /// SEC-22: IPv6 forms that reach an internal IPv4 address, and
+    /// deprecated site-local space.
+    #[test]
+    fn v6_blocks_embedded_internal_v4_and_site_local() {
+        for ip in [
+            // NAT64 well-known prefix to loopback, metadata, RFC1918.
+            "64:ff9b::7f00:1",
+            "64:ff9b::a9fe:a9fe",
+            "64:ff9b::10.0.0.1",
+            // Local-use NAT64 (RFC 8215): what it reaches is site-defined.
+            "64:ff9b:1::8.8.8.8",
+            // IPv4-compatible (deprecated) ::a.b.c.d.
+            "::127.0.0.1",
+            "::169.254.169.254",
+            "::10.0.0.1",
+            // Site-local fec0::/10.
+            "fec0::1",
+            "feff::1",
+        ] {
+            assert!(
+                is_private_v6(ip.parse().unwrap()),
+                "{ip} should be internal"
+            );
+        }
+        // NAT64 to a public address is an ordinary outbound route.
+        assert!(!is_private_v6("64:ff9b::8.8.8.8".parse().unwrap()));
     }
 
     #[test]

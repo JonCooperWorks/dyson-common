@@ -148,9 +148,33 @@ pub fn needles(value: &str) -> Vec<String> {
     }
     let encoded = percent_encoding::utf8_percent_encode(value, ENCODED).to_string();
     if encoded != value {
+        // Escapes may be written with lowercase hex (`%2f`) as well.
+        let lower = lowercase_escapes(&encoded);
+        if lower != encoded {
+            out.push(lower);
+        }
         out.push(encoded);
     }
     in_base64(value, &mut out);
+    out
+}
+
+/// `encoded` with the hex digits of each `%XX` escape in lowercase; the
+/// characters percent-encoding left alone keep their case.
+fn lowercase_escapes(encoded: &str) -> String {
+    let mut out = String::with_capacity(encoded.len());
+    let mut hex = 0;
+    for c in encoded.chars() {
+        if hex > 0 {
+            out.push(c.to_ascii_lowercase());
+            hex -= 1;
+        } else {
+            if c == '%' {
+                hex = 2;
+            }
+            out.push(c);
+        }
+    }
     out
 }
 
@@ -278,16 +302,70 @@ impl Redactor {
         (out, count)
     }
 
-    /// Every string of a document, redacted in place. How many were found.
-    /// Keys are left: they are field names.
+    /// Every string of a document, and every object key, redacted in
+    /// place. How many were found. A key is taken out too: a header map or
+    /// an environment written as an object may hold a secret as a name.
     pub fn document(&self, document: &mut Value) -> usize {
         let mut count = 0;
-        strings(document, &mut |text| self.change(text, &mut count));
+        strings_and_keys(document, &mut |text| self.change(text, &mut count));
         count
     }
 }
 
-/// Apply `change` to every string value of a document. Keys are left.
+/// Apply `change` to every string value of a document and to every object
+/// key. A key renamed to one its object already has (two forms of one
+/// secret, or a secret beside its own token) gets a `#n` suffix, so no
+/// value is lost. The order of keys is kept.
+pub fn strings_and_keys(value: &mut Value, change: &mut impl FnMut(&str) -> Option<String>) {
+    match value {
+        Value::String(text) => {
+            if let Some(changed) = change(text) {
+                *text = changed;
+            }
+        }
+        Value::Array(items) => items
+            .iter_mut()
+            .for_each(|item| strings_and_keys(item, change)),
+        Value::Object(fields) => {
+            fields
+                .values_mut()
+                .for_each(|field| strings_and_keys(field, change));
+            let renames: std::collections::HashMap<String, String> = fields
+                .keys()
+                .filter_map(|key| change(key).map(|renamed| (key.clone(), renamed)))
+                .collect();
+            if renames.is_empty() {
+                return;
+            }
+            let old = std::mem::take(fields);
+            let kept: HashSet<String> = old
+                .keys()
+                .filter(|key| !renames.contains_key(*key))
+                .cloned()
+                .collect();
+            for (key, field) in old {
+                let name = match renames.get(&key) {
+                    None => key,
+                    Some(renamed) => {
+                        let taken = |name: &str| kept.contains(name) || fields.contains_key(name);
+                        let mut name = renamed.clone();
+                        let mut n = 2;
+                        while taken(&name) {
+                            name = format!("{renamed}#{n}");
+                            n += 1;
+                        }
+                        name
+                    }
+                };
+                fields.insert(name, field);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Apply `change` to every string value of a document. Keys are left; see
+/// [`strings_and_keys`] for a walk that changes them too.
 pub fn strings(value: &mut Value, change: &mut impl FnMut(&str) -> Option<String>) {
     match value {
         Value::String(text) => {
@@ -301,13 +379,11 @@ pub fn strings(value: &mut Value, change: &mut impl FnMut(&str) -> Option<String
     }
 }
 
-/// Every redaction token a document holds.
+/// Every redaction token a document holds, in its strings or its keys.
 pub fn tokens_in(document: &Value) -> HashSet<String> {
     let mut found = HashSet::new();
-    let mut walk = document.clone();
-    strings(&mut walk, &mut |text| {
+    each_text(document, &mut |text| {
         found.extend(TOKEN.find_iter(text).map(|token| token.as_str().to_owned()));
-        None
     });
     found
 }
@@ -373,7 +449,7 @@ pub fn is_token_in(document: &Value, value: &str) -> Option<bool> {
     }
     let mut seen = false;
     let mut all = true;
-    each_string(document, &mut |text| {
+    each_text(document, &mut |text| {
         if !all || !text.contains(value) {
             return;
         }
@@ -396,12 +472,16 @@ pub fn is_token_in(document: &Value, value: &str) -> Option<bool> {
     seen.then_some(all)
 }
 
-/// Every string value of a document, read in place. Keys are left.
-fn each_string(value: &Value, read: &mut impl FnMut(&str)) {
+/// Every string value and object key of a document, read in place
+/// (what [`Redactor::document`] redacts).
+pub fn each_text(value: &Value, read: &mut impl FnMut(&str)) {
     match value {
         Value::String(text) => read(text),
-        Value::Array(items) => items.iter().for_each(|item| each_string(item, read)),
-        Value::Object(fields) => fields.values().for_each(|field| each_string(field, read)),
+        Value::Array(items) => items.iter().for_each(|item| each_text(item, read)),
+        Value::Object(fields) => fields.iter().for_each(|(key, field)| {
+            read(key);
+            each_text(field, read);
+        }),
         _ => {}
     }
 }
@@ -714,6 +794,70 @@ mod tests {
         let document = json!({"a": "[REDACTED:generic-api-key:3fa9c1d2]", "b": "3fa9c1d2"});
         assert_eq!(is_token_in(&document, "3fa9c1d2"), Some(false));
         assert_eq!(is_token_in(&document, "nowhere"), None);
+    }
+
+    /// SEC-21: a secret used as an object key leaked through `document`.
+    #[test]
+    fn a_secret_written_as_a_key_is_taken_out() {
+        let secret = "sk-live-9f8e7d6c5b4a39281706f5e4d3c2b1a0";
+        let redactor = redactor(&[secret], &[]);
+        let mut document = json!({
+            "headers": { secret: "value", "plain": secret },
+            "list": [{ format!("Bearer {secret}"): 1 }],
+        });
+        let count = redactor.document(&mut document);
+        let text = document.to_string();
+        assert!(!text.contains(secret), "{text}");
+        assert_eq!(count, 3, "{text}");
+        // The values under renamed keys are kept.
+        let headers = document["headers"].as_object().unwrap();
+        assert_eq!(headers.len(), 2, "{text}");
+        assert!(headers.values().any(|value| value == "value"), "{text}");
+    }
+
+    /// Two keys that redact to the same token keep both values.
+    #[test]
+    fn keys_that_redact_alike_are_both_kept() {
+        let secret = "sk-live-9f8e7d6c5b4a39281706f5e4d3c2b1a0";
+        let redactor = redactor(&[secret], &[]);
+        let token = token("test.rule", &digest(KEY, secret));
+        let mut document = json!({ secret: 1, token.clone(): 2 });
+        redactor.document(&mut document);
+        let fields = document.as_object().unwrap();
+        assert_eq!(fields.len(), 2, "{document}");
+        assert!(!document.to_string().contains(secret), "{document}");
+    }
+
+    /// SEC-21: percent-encoding may use lowercase hex digits.
+    #[test]
+    fn lowercase_percent_encoding_is_found() {
+        let secret = "abc/def+ghi=jkl/mno";
+        let redactor = redactor(&[secret], &[]);
+        let lower = "abc%2fdef%2bghi%3djkl%2fmno";
+        let mut document = json!({ "url": format!("https://x.test/?k={lower}") });
+        assert_eq!(redactor.document(&mut document), 1, "{document}");
+        assert!(!document.to_string().contains("abc%2fdef"), "{document}");
+    }
+
+    /// A token in a key counts as present, and a rescan finding in a key
+    /// is judged by where it is written.
+    #[test]
+    fn keys_are_read_for_tokens() {
+        let document = json!({ "[REDACTED:generic-api-key:3fa9c1d2]": "x" });
+        assert!(tokens_in(&document).contains("[REDACTED:generic-api-key:3fa9c1d2]"));
+        assert_eq!(is_token_in(&document, "3fa9c1d2"), Some(true));
+        let document = json!({ "pw-hunter22": "x" });
+        assert_eq!(is_token_in(&document, "hunter22"), Some(false));
+    }
+
+    /// A rescan that finds a secret in a key takes it out rather than
+    /// holding the document back as "not in it verbatim".
+    #[test]
+    fn a_rescan_finding_in_a_key_is_taken_out() {
+        let mut document = json!({ "pw=hunter22": "x" });
+        let outcome = scrub(&mut document, &Redactor::default(), 3, finds(&["hunter22"]));
+        assert_eq!(outcome, Ok(Scrubbed::Clean { redactions: 1 }));
+        assert!(!document.to_string().contains("hunter22"), "{document}");
     }
 
     fn found(value: &str, shown: bool) -> Leftover {

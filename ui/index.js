@@ -32,6 +32,9 @@ export {
 } from './format.js';
 export { copyToClipboard, copyText, copyFetched } from './clipboard.js';
 export { createBuildWatcher } from './buildWatch.js';
+// MarkdownBody itself is in the separate dyson-common-ui/markdown entry.
+export { isPlainParagraph, safeMarkdownHref } from './markdownSafety.js';
+export { createSseParser, readSse, SSE_DEFAULT_MAX_BUFFER } from './sse.js';
 export { useStored, useDebounced } from './useStored.js';
 export { SegmentedControl } from './SegmentedControl.jsx';
 export { Pager, PAGE_SIZES, usePageSize } from './Pager.jsx';

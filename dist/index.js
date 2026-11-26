@@ -332,6 +332,13 @@ function Combobox({
 }
 
 // ui/createStore.js
+function freezeByDefault() {
+  try {
+    return process.env.NODE_ENV !== "production";
+  } catch {
+    return false;
+  }
+}
 function deepFreeze(obj) {
   if (obj === null || typeof obj !== "object") return obj;
   if (Object.isFrozen(obj)) return obj;
@@ -342,8 +349,9 @@ function deepFreeze(obj) {
   }
   return obj;
 }
-function createStore(initial) {
-  let snapshot = deepFreeze(initial);
+function createStore(initial, { freeze = freezeByDefault() } = {}) {
+  const settle = freeze ? deepFreeze : (value) => value;
+  let snapshot = settle(initial);
   const listeners = /* @__PURE__ */ new Set();
   const getSnapshot = () => snapshot;
   const subscribe = (fn) => {
@@ -355,7 +363,7 @@ function createStore(initial) {
   const dispatch = (reducer) => {
     const next = reducer(snapshot);
     if (next === snapshot) return;
-    snapshot = deepFreeze(next);
+    snapshot = settle(next);
     for (const fn of listeners) fn();
   };
   return { getSnapshot, subscribe, dispatch };
@@ -897,6 +905,7 @@ function createBuildWatcher({ build, url = "/version.json", every = 5 * 60 * 1e3
   const current = typeof build === "string" && build ? build : "dev";
   let newer = false;
   let watching = false;
+  let timer = null;
   const listeners = /* @__PURE__ */ new Set();
   async function check() {
     if (newer || current === "dev") return newer;
@@ -912,27 +921,36 @@ function createBuildWatcher({ build, url = "/version.json", every = 5 * 60 * 1e3
     }
     return newer;
   }
+  const onVisible = () => {
+    if (!document.hidden) check();
+  };
+  const onPreloadError = (event) => {
+    const key = `${reloadKey}-${current}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, "1");
+    } catch {
+      return;
+    }
+    event.preventDefault();
+    window.location.reload();
+  };
   function watch() {
     if (watching || typeof window === "undefined") return;
     watching = true;
-    setInterval(() => {
-      if (!document.hidden) check();
-    }, every);
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) check();
-    });
+    timer = setInterval(onVisible, every);
+    document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", check);
-    window.addEventListener("vite:preloadError", (event) => {
-      const key = `${reloadKey}-${current}`;
-      try {
-        if (sessionStorage.getItem(key)) return;
-        sessionStorage.setItem(key, "1");
-      } catch {
-        return;
-      }
-      event.preventDefault();
-      window.location.reload();
-    });
+    window.addEventListener("vite:preloadError", onPreloadError);
+  }
+  function stop() {
+    if (!watching) return;
+    watching = false;
+    clearInterval(timer);
+    timer = null;
+    document.removeEventListener("visibilitychange", onVisible);
+    window.removeEventListener("focus", check);
+    window.removeEventListener("vite:preloadError", onPreloadError);
   }
   return {
     build: current,
@@ -942,8 +960,136 @@ function createBuildWatcher({ build, url = "/version.json", every = 5 * 60 * 1e3
       return () => listeners.delete(fn);
     },
     check,
-    watch
+    watch,
+    stop
   };
+}
+
+// ui/markdownSafety.js
+var MD_SIGNIFICANT = /[\n\r\t*_`#>[\]|~<>&\\!$^{}]/;
+var MD_AUTOLINKABLE = /(:\/\/|www\.|@)/;
+var MD_BLOCK_OPENER = /^[-+=\d\s]/;
+function isPlainParagraph(text2) {
+  return typeof text2 === "string" && text2.length > 0 && text2 === text2.trim() && !MD_SIGNIFICANT.test(text2) && !MD_AUTOLINKABLE.test(text2) && !MD_BLOCK_OPENER.test(text2);
+}
+function safeMarkdownHref(href) {
+  const value = String(href || "").trim();
+  if (!value) return "";
+  if (/^(https?:|mailto:)/i.test(value)) return value;
+  if (/^(#|\/(?![/\\])|\.\/|\.\.\/)/.test(value)) return value;
+  return "";
+}
+
+// ui/sse.js
+var SSE_DEFAULT_MAX_BUFFER = 1024 * 1024;
+function createSseParser(onEvent, { maxBuffer = SSE_DEFAULT_MAX_BUFFER } = {}) {
+  let line = "";
+  let afterCr = false;
+  let event = "";
+  let data = "";
+  let hasData = false;
+  let retry;
+  let lastId;
+  const check = () => {
+    if (line.length + data.length > maxBuffer) {
+      throw new Error(`an SSE event longer than ${maxBuffer} characters`);
+    }
+  };
+  const dispatch = () => {
+    const out = { event: event || "message", data, id: lastId, retry };
+    const had = hasData;
+    event = "";
+    data = "";
+    hasData = false;
+    retry = void 0;
+    if (had) onEvent(out);
+  };
+  const lineDone = (text2) => {
+    if (text2 === "") {
+      dispatch();
+      return;
+    }
+    if (text2[0] === ":") return;
+    const colon = text2.indexOf(":");
+    const field = colon < 0 ? text2 : text2.slice(0, colon);
+    let value = colon < 0 ? "" : text2.slice(colon + 1);
+    if (value[0] === " ") value = value.slice(1);
+    if (field === "event") event = value;
+    else if (field === "data") {
+      data = hasData ? `${data}
+${value}` : value;
+      hasData = true;
+    } else if (field === "id") {
+      if (!value.includes("\0")) lastId = value;
+    } else if (field === "retry") {
+      if (/^\d+$/.test(value)) retry = Number(value);
+    }
+  };
+  function push(chunk) {
+    let rest = String(chunk);
+    if (afterCr) {
+      afterCr = false;
+      if (rest[0] === "\n") rest = rest.slice(1);
+    }
+    let start = 0;
+    for (let i = 0; i < rest.length; i++) {
+      const c = rest[i];
+      if (c !== "\n" && c !== "\r") continue;
+      line += rest.slice(start, i);
+      check();
+      const done = line;
+      line = "";
+      lineDone(done);
+      if (c === "\r") {
+        if (i + 1 < rest.length) {
+          if (rest[i + 1] === "\n") i++;
+        } else afterCr = true;
+      }
+      start = i + 1;
+    }
+    line += rest.slice(start);
+    check();
+  }
+  function end() {
+    line = "";
+    afterCr = false;
+    event = "";
+    data = "";
+    hasData = false;
+    retry = void 0;
+  }
+  return { push, end, lastEventId: () => lastId };
+}
+async function readSse(response, onEvent, { signal, maxBuffer } = {}) {
+  const body = response?.body;
+  if (!body) return;
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  const parser = createSseParser((event) => {
+    if (!signal?.aborted) onEvent(event);
+  }, { maxBuffer });
+  const onAbort = () => {
+    reader.cancel().catch(() => {
+    });
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    while (!signal?.aborted) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      parser.push(decoder.decode(value, { stream: true }));
+    }
+    if (!signal?.aborted) parser.push(decoder.decode());
+    parser.end();
+  } catch (err) {
+    if (!signal?.aborted) throw err;
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+    try {
+      reader.releaseLock();
+    } catch {
+    }
+  }
 }
 
 // ui/useStored.js
@@ -2194,6 +2340,7 @@ export {
   Pager,
   SORT_DIRECTION,
   SORT_NATURAL,
+  SSE_DEFAULT_MAX_BUFFER,
   STATUS_DOT_STATES,
   SUBSCRIPTION_CONNECT_PROVIDERS,
   SWARM_CONTEXT_PATH,
@@ -2215,6 +2362,7 @@ export {
   copyText,
   copyToClipboard,
   createBuildWatcher,
+  createSseParser,
   createStore,
   createThemeController,
   createUseAppState,
@@ -2228,11 +2376,14 @@ export {
   formatUsd,
   getSwarmContext,
   isAgentId,
+  isPlainParagraph,
   loadSwarmContext,
   parseSort,
   parseSwarmContext,
   pkceChallenge,
   randomString,
+  readSse,
+  safeMarkdownHref,
   safeName,
   setBrandMarkVariant,
   severityLevel,

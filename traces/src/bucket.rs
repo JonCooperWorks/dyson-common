@@ -15,6 +15,8 @@ pub const HF_ENDPOINT: &str = "https://s3.hf.co";
 pub const HF_REGION: &str = "us-east-1";
 /// The most of one file [`Sink::get`] reads.
 pub const GET_MOST: usize = 32 * 1024 * 1024;
+/// The most of an error's body read for its message.
+const ERROR_MOST: usize = 4 * 1024;
 
 /// Why a file could not be put, or the bucket not reached.
 #[derive(Debug)]
@@ -101,6 +103,9 @@ impl Bucket {
         Ok(Self {
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(120))
+                // The request is signed for this endpoint: a redirect is
+                // an error, never followed somewhere else.
+                .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .map_err(|e| Error(format!("build the bucket's client: {e}")))?,
             endpoint,
@@ -187,13 +192,19 @@ impl Bucket {
             }
             return Ok(Some(out));
         }
-        let said: String = response
-            .text()
-            .await
-            .unwrap_or_default()
-            .chars()
-            .take(300)
-            .collect();
+        // Only as much of the body as the message shows: an error page may
+        // be large, or never end.
+        let mut body = Vec::new();
+        while body.len() < ERROR_MOST {
+            match response.chunk().await {
+                Ok(Some(chunk)) => {
+                    let room = ERROR_MOST - body.len();
+                    body.extend_from_slice(&chunk[..chunk.len().min(room)]);
+                }
+                Ok(None) | Err(_) => break,
+            }
+        }
+        let said: String = String::from_utf8_lossy(&body).chars().take(300).collect();
         Err(Error(format!(
             "the bucket answered {status} to {method} {key}: {said}"
         )))
@@ -243,6 +254,83 @@ mod tests {
             "https://s3.hf.co/owner/traces/sessions/2026/10/15/x.jsonl"
         );
         assert_eq!(bucket.describe(), "https://s3.hf.co/owner/traces");
+    }
+
+    /// A bucket at a plain-HTTP test server (`new` insists on https).
+    fn local(port: u16) -> Bucket {
+        let mut bucket = bucket(HF_ENDPOINT, "owner/traces").unwrap();
+        bucket.endpoint = format!("http://127.0.0.1:{port}").parse().unwrap();
+        bucket
+    }
+
+    /// A server that answers each connection with `answer` and counts them.
+    fn serve(
+        answer: impl Fn(&mut std::net::TcpStream) + Send + 'static,
+    ) -> (u16, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        use std::io::Read as _;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let seen = hits.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { return };
+                seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                answer(&mut stream);
+            }
+        });
+        (port, hits)
+    }
+
+    /// SEC-22: a redirect is not followed; the signed request goes only to
+    /// the endpoint configured.
+    #[tokio::test]
+    async fn does_not_follow_redirects() {
+        use std::io::Write as _;
+        let (elsewhere, hits) = serve(|stream| {
+            let _ = stream.write_all(
+                b"HTTP/1.1 200 OK\r\ncontent-length: 4\r\nconnection: close\r\n\r\nleak",
+            );
+        });
+        let (port, _) = serve(move |stream| {
+            let _ = stream.write_all(
+                format!(
+                    "HTTP/1.1 302 Found\r\nlocation: http://127.0.0.1:{elsewhere}/x\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+                )
+                .as_bytes(),
+            );
+        });
+        let got = local(port).get("sessions/x.jsonl").await;
+        assert!(got.is_err(), "{got:?}");
+        assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    /// SEC-22: an error's body is read only as far as the message needs,
+    /// not to its end.
+    #[tokio::test]
+    async fn an_error_body_is_read_only_so_far() {
+        use std::io::Write as _;
+        let (port, _) = serve(|stream| {
+            let _ = stream.write_all(
+                b"HTTP/1.1 500 Oops\r\ncontent-length: 1000000000\r\nconnection: close\r\n\r\n",
+            );
+            let _ = stream.write_all(&[b'x'; 64 * 1024]);
+            // Then never finish.
+            std::thread::sleep(Duration::from_secs(60));
+        });
+        let got = tokio::time::timeout(
+            Duration::from_secs(10),
+            local(port).put("sessions/x.jsonl", b"{}".to_vec()),
+        )
+        .await
+        .expect("the error came back without reading the whole body");
+        let Err(Error(said)) = got else {
+            panic!("{got:?}")
+        };
+        assert!(said.contains("500"), "{said}");
+        assert!(said.len() < 1024, "{said}");
     }
 
     #[test]

@@ -172,13 +172,12 @@ impl Session {
     /// The file: the header line, then a line a message, each ending in a
     /// newline.
     pub fn to_jsonl(&self) -> String {
-        let mut out = line(&Line::Session(self.header.clone()));
+        let mut out = Vec::new();
+        write_line(&mut out, &LineRef::Session(&self.header));
         for message in &self.messages {
-            out.push_str(&line(&Line::Message {
-                message: message.clone(),
-            }));
+            write_line(&mut out, &LineRef::Message { message });
         }
-        out
+        String::from_utf8(out).expect("serde_json writes UTF-8")
     }
 
     /// A file read back. Blank lines are skipped.
@@ -207,10 +206,18 @@ impl Session {
     }
 }
 
-fn line(line: &Line) -> String {
-    let mut out = serde_json::to_string(line).expect("a session serializes");
-    out.push('\n');
-    out
+/// [`Line`], borrowed: what [`Session::to_jsonl`] writes without cloning
+/// each message.
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+enum LineRef<'a> {
+    Session(&'a Header),
+    Message { message: &'a Message },
+}
+
+fn write_line(out: &mut Vec<u8>, line: &LineRef<'_>) {
+    serde_json::to_writer(&mut *out, line).expect("a session serializes");
+    out.push(b'\n');
 }
 
 /// The first line of `text` that says anything, cut to `most` characters.

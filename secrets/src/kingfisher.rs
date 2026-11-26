@@ -191,7 +191,7 @@ impl Scanner {
 }
 
 impl Scanner {
-    /// Every secret in the strings of a JSON document, as
+    /// Every secret in the strings and keys of a JSON document, as
     /// [`crate::scrub`] takes them: each replaced with a token naming its
     /// rule and its digest under `key` (see [`crate::redact::digest`]).
     /// Card numbers and IBANs are included with the `payment` feature.
@@ -210,13 +210,10 @@ impl Scanner {
         key: &[u8],
         keep: impl Fn(&Hit) -> bool,
     ) -> Result<Vec<crate::Leftover>, Error> {
-        let mut texts = Vec::new();
-        crate::redact::strings(&mut document.clone(), &mut |text| {
-            texts.push(text.to_owned());
-            None
-        });
+        let mut texts: Vec<&str> = Vec::new();
+        collect_texts(document, &mut texts);
         let mut out: Vec<crate::Leftover> = Vec::new();
-        for text in &texts {
+        for text in texts {
             for hit in self.scan(text)? {
                 if !keep(&hit) || out.iter().any(|left| left.value == hit.value) {
                     continue;
@@ -231,6 +228,21 @@ impl Scanner {
             }
         }
         Ok(out)
+    }
+}
+
+/// Every string value and object key of a document, borrowed (the same
+/// walk as [`crate::redact::each_text`], which a closure cannot borrow
+/// out of).
+fn collect_texts<'a>(value: &'a serde_json::Value, out: &mut Vec<&'a str>) {
+    match value {
+        serde_json::Value::String(text) => out.push(text),
+        serde_json::Value::Array(items) => items.iter().for_each(|item| collect_texts(item, out)),
+        serde_json::Value::Object(fields) => fields.iter().for_each(|(key, field)| {
+            out.push(key);
+            collect_texts(field, out);
+        }),
+        _ => {}
     }
 }
 

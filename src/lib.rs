@@ -26,6 +26,7 @@
 //!   sandbox env-var names for the state mirror.
 //! - [`contracts`] — named header/route constants crossing the boundary.
 //! - [`jsonrpc`] — JSON-RPC 2.0 base envelope types (MCP transport).
+//! - [`sse`] — an incremental, size-capped `text/event-stream` decoder.
 //! - [`ui`] — shared design-token CSS and theme helpers for Rust-rendered pages.
 //! - [`util`] — constant-time compare, env parsing, backoff term.
 //! - [`date`] — civil-date arithmetic (both directions).
@@ -44,6 +45,7 @@ pub mod oauth;
 #[cfg(feature = "oidc")]
 pub mod oidc;
 pub mod security_tester;
+pub mod sse;
 pub mod state_sync;
 pub mod tokens;
 pub mod ui;

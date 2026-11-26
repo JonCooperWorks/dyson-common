@@ -1,5 +1,5 @@
 /* Tests for the shared subscribe/dispatch store. */
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createStore, deepFreeze } from './createStore.js';
 
 describe('deepFreeze', () => {
@@ -51,5 +51,25 @@ describe('createStore', () => {
     unsub();
     store.dispatch((s) => ({ ...s, n: 1 }));
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe('createStore freezing (PERF-07)', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  test('does not deep-freeze snapshots in a production build', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const store = createStore({ a: { b: 1 } });
+    expect(Object.isFrozen(store.getSnapshot())).toBe(false);
+    store.dispatch((s) => ({ ...s, a: { b: 2 } }));
+    expect(Object.isFrozen(store.getSnapshot().a)).toBe(false);
+  });
+
+  test('freezes in dev and test, and an explicit option wins', () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    expect(Object.isFrozen(createStore({ n: 0 }).getSnapshot())).toBe(true);
+    expect(Object.isFrozen(createStore({ n: 0 }, { freeze: false }).getSnapshot())).toBe(false);
+    vi.stubEnv('NODE_ENV', 'production');
+    expect(Object.isFrozen(createStore({ n: 0 }, { freeze: true }).getSnapshot())).toBe(true);
   });
 });

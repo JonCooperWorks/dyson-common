@@ -82,6 +82,13 @@ impl<T> ModelRouter<T> {
     }
 
     pub fn resolve(&self, model: &str) -> Option<&T> {
+        self.resolve_with_regex(model).map(|(value, _)| value)
+    }
+
+    /// [`Self::resolve`], with the compiled regex of the route that matched
+    /// when it is a regex route, for [`expand_model_rewrite_with`] without
+    /// compiling the pattern again.
+    pub fn resolve_with_regex(&self, model: &str) -> Option<(&T, Option<&regex::Regex>)> {
         self.exact
             .get(model)
             .or_else(|| {
@@ -90,13 +97,14 @@ impl<T> ModelRouter<T> {
                     .find(|(prefix, _, _)| model.starts_with(prefix))
                     .map(|(_, _, value)| value)
             })
+            .map(|value| (value, None))
             .or_else(|| {
                 self.regexes
                     .iter()
                     .find(|route| route.regex.is_match(model))
-                    .map(|route| &route.value)
+                    .map(|route| (&route.value, Some(&route.regex)))
             })
-            .or(self.catch_all.as_ref())
+            .or_else(|| self.catch_all.as_ref().map(|value| (value, None)))
     }
 
     pub fn catch_all(&self) -> Option<&T> {
@@ -124,8 +132,21 @@ impl<T> ModelRouter<T> {
 }
 
 /// Expand a regex capture template such as `upstream/$1` or `${family}`.
+///
+/// Compiles `pattern` on every call; on a hot path use
+/// [`expand_model_rewrite_with`] with the route's compiled regex (see
+/// [`ModelRouter::resolve_with_regex`]).
 pub fn expand_model_rewrite(pattern: &str, model: &str, template: &str) -> Option<String> {
     let regex = regex::Regex::new(pattern).ok()?;
+    expand_model_rewrite_with(&regex, model, template)
+}
+
+/// [`expand_model_rewrite`] with a regex already compiled.
+pub fn expand_model_rewrite_with(
+    regex: &regex::Regex,
+    model: &str,
+    template: &str,
+) -> Option<String> {
     let captures = regex.captures(model)?;
     let mut output = String::new();
     captures.expand(template, &mut output);
@@ -169,6 +190,35 @@ mod tests {
         assert_eq!(router.resolve("openai/gpt-4"), Some(&"provider"));
         assert_eq!(router.resolve("anthropic/claude-opus"), Some(&"regex"));
         assert_eq!(router.resolve("mistral/large"), Some(&"all"));
+    }
+
+    #[test]
+    fn expands_with_a_compiled_regex_and_the_matched_route() {
+        let (router, _) = ModelRouter::build([
+            ModelRoute {
+                pattern: r"^vendor/(?P<family>[^/]+)/(.+)$".into(),
+                is_regex: true,
+                enabled: true,
+                value: "regex",
+            },
+            ModelRoute {
+                pattern: "openai/*".into(),
+                is_regex: false,
+                enabled: true,
+                value: "prefix",
+            },
+        ]);
+        let (value, regex) = router.resolve_with_regex("vendor/claude/opus").unwrap();
+        assert_eq!(value, &"regex");
+        assert_eq!(
+            expand_model_rewrite_with(regex.unwrap(), "vendor/claude/opus", "mirror/${family}/$2"),
+            Some("mirror/claude/opus".into())
+        );
+        let (value, regex) = router.resolve_with_regex("openai/gpt-5").unwrap();
+        assert_eq!((value, regex.is_none()), (&"prefix", true));
+        assert!(router.resolve_with_regex("nothing").is_none());
+        let regex = regex::Regex::new("^a/(.+)$").unwrap();
+        assert_eq!(expand_model_rewrite_with(&regex, "b/x", "$1"), None);
     }
 
     #[test]
