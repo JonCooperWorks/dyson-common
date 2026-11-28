@@ -1,50 +1,15 @@
 //! AWS Signature Version 4 for S3 requests, as plain functions: no HTTP
 //! client, so a host can sign with whatever client it already has.
 //!
-//! Only what a bucket of session files needs: path-style requests whose
-//! object keys hold no character that needs percent-encoding (see
-//! [`crate::object_key`]), no query string, the payload hashed whole.
+//! Thin compatibility layer over [`dyson_sigv4`], fixed to the `s3` service
+//! with no query string and a whole-payload SHA-256.
 
 use chrono::{DateTime, Utc};
-use sha2::{Digest as _, Sha256};
 
-/// A bucket's keys. `Debug` never shows the secret.
-#[derive(Clone)]
-pub struct Credentials {
-    pub access_key_id: String,
-    pub secret_access_key: String,
-    pub region: String,
-}
+pub use dyson_sigv4::{Credentials, amz_date, payload_sha256};
 
-impl std::fmt::Debug for Credentials {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Credentials")
-            .field("access_key_id", &self.access_key_id)
-            .field("secret_access_key", &"…")
-            .field("region", &self.region)
-            .finish()
-    }
-}
-
-fn hmac(key: &[u8], data: &[u8]) -> Vec<u8> {
-    use hmac::Mac as _;
-    let mut mac = hmac::Hmac::<Sha256>::new_from_slice(key).expect("HMAC accepts any key size");
-    mac.update(data);
-    mac.finalize().into_bytes().to_vec()
-}
-
-/// The hex SHA-256 of a payload, as `x-amz-content-sha256` carries it.
-pub fn payload_sha256(body: &[u8]) -> String {
-    hex::encode(Sha256::digest(body))
-}
-
-/// The `x-amz-date` of a moment.
-pub fn amz_date(now: DateTime<Utc>) -> String {
-    now.format("%Y%m%dT%H%M%SZ").to_string()
-}
-
-/// An `Authorization` header for S3. `headers` are the ones signed,
-/// lowercase and in order of name; `path` is as it is sent.
+/// An `Authorization` header for S3. `headers` are the ones signed (including
+/// `host`); `path` is as it is sent.
 pub fn authorization(
     method: &str,
     path: &str,
@@ -53,33 +18,17 @@ pub fn authorization(
     credentials: &Credentials,
     now: DateTime<Utc>,
 ) -> String {
-    let date = now.format("%Y%m%d").to_string();
-    let stamp = amz_date(now);
-    let region = credentials.region.as_str();
-    let signed: Vec<&str> = headers.iter().map(|(name, _)| *name).collect();
-    let signed = signed.join(";");
-    let canonical_headers: String = headers
-        .iter()
-        .map(|(name, value)| format!("{name}:{}\n", value.trim()))
-        .collect();
-    let canonical = format!("{method}\n{path}\n\n{canonical_headers}\n{signed}\n{payload_sha256}");
-    let scope = format!("{date}/{region}/s3/aws4_request");
-    let to_sign = format!(
-        "AWS4-HMAC-SHA256\n{stamp}\n{scope}\n{}",
-        hex::encode(Sha256::digest(canonical.as_bytes()))
-    );
-    let mut key = hmac(
-        format!("AWS4{}", credentials.secret_access_key).as_bytes(),
-        date.as_bytes(),
-    );
-    for part in [region, "s3", "aws4_request"] {
-        key = hmac(&key, part.as_bytes());
-    }
-    let signature = hex::encode(hmac(&key, to_sign.as_bytes()));
-    format!(
-        "AWS4-HMAC-SHA256 Credential={}/{scope}, SignedHeaders={signed}, Signature={signature}",
-        credentials.access_key_id
+    dyson_sigv4::authorization(
+        method,
+        path,
+        "",
+        headers,
+        payload_sha256,
+        credentials,
+        dyson_sigv4::S3_SERVICE,
+        now,
     )
+    .expect("valid SigV4 signing headers including host")
 }
 
 /// The headers that sign a request with no others: `host` is what the
@@ -94,24 +43,17 @@ pub fn sign(
     now: DateTime<Utc>,
 ) -> [(&'static str, String); 3] {
     let payload = payload_sha256(body);
-    let stamp = amz_date(now);
-    let authorization = authorization(
+    dyson_sigv4::sign(
         method,
+        host,
         path,
-        &[
-            ("host", host),
-            ("x-amz-content-sha256", &payload),
-            ("x-amz-date", &stamp),
-        ],
+        "",
         &payload,
         credentials,
+        dyson_sigv4::S3_SERVICE,
         now,
-    );
-    [
-        ("x-amz-content-sha256", payload),
-        ("x-amz-date", stamp),
-        ("authorization", authorization),
-    ]
+    )
+    .expect("valid SigV4 host header")
 }
 
 #[cfg(test)]

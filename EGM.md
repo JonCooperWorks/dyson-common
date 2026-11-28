@@ -10,7 +10,7 @@ break. It has two halves.
 ### Rust workspace
 
 The root crate is `dyson-common`, at version `0.1.13` in `Cargo.toml`. The
-workspace members are `telegram`, `inference-protocol`, `secrets`, and
+workspace members are `telegram`, `inference-protocol`, `secrets`, `sigv4`, and
 `traces`.
 
 The root crate is a leaf by design: DTOs, serde, and pure helpers. Its
@@ -56,6 +56,7 @@ primitives from `ui/`, bundled by esbuild into `dist/index.js`, plus
   - `oauth`, documented in [./src/oauth/EGM.md](./src/oauth/EGM.md)
 - inference-protocol: [./inference-protocol/EGM.md](./inference-protocol/EGM.md). `dyson-inference-protocol`: `/v1/*` route classification, dialect translation, error envelopes, streaming re-encoding, and `ModelRouter<T>`.
 - secrets: [./secrets/EGM.md](./secrets/EGM.md). `dyson-secrets`: redaction and `scrub`, plus the Kingfisher, payment, and external-scanner detectors.
+- sigv4: [./sigv4/README.md](./sigv4/README.md). `dyson-sigv4`: pure AWS Signature Version 4 header signing, query presigning, canonical URI/query encoding, and presign-parameter stripping.
 - telegram: [./telegram/EGM.md](./telegram/EGM.md). `dyson-telegram`: the media attachment policy and the bounded Bot API file download.
 - traces: [./traces/EGM.md](./traces/EGM.md). `dyson-traces`: Session Traces JSONL, SigV4 signing, and the S3-gateway `Bucket`.
 - ui: [./ui/EGM.md](./ui/EGM.md). `dyson-common-ui`: shared React components, hooks, brand marks, theme controller, and Vite build-id plugin.

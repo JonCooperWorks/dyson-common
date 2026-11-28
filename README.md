@@ -89,14 +89,23 @@ profiles).
 Third-party data: Betterleaks' generic rules (MIT, `secrets/rules/`) and the
 BIN List Data (CC BY 4.0, `secrets/data/README.md`).
 
+### SigV4 (`dyson-sigv4`)
+
+Pure AWS Signature Version 4 signing and presigning (`sigv4/`): header signing
+(hashed payload or `UNSIGNED-PAYLOAD`, caller-chosen signed headers,
+configurable service name), query presigning (`PUT`, multipart `UploadPart`,
+`GET` with `versionId`/`response-content-*`), S3 canonical URI/query encoding
+(path as sent, no normalization, `+` literal), and `strip_presign_params` for
+egress-proxy re-signing.
+
 ### Traces (`dyson-traces`)
 
 Agent conversations as Hugging Face **Session Traces**, the JSON Lines
 format the HF trace viewer reads: a `session` header line, then a `message`
 line a message (`role`, `content`, `reasoningContent`, `toolCalls`,
 `toolCallId`, `timestamp`, `model`). `Session::to_jsonl` / `from_jsonl`,
-`object_key` (`<prefix>/YYYY/MM/DD/<id>.jsonl`), and `sigv4` (AWS Signature
-V4 as plain functions). The `bucket` feature adds a `Sink` trait and an
+`object_key` (`<prefix>/YYYY/MM/DD/<id>.jsonl`), and `sigv4` (a thin
+compatibility layer over `dyson-sigv4`). The `bucket` feature adds a `Sink` trait and an
 S3-gateway `Bucket` client; `Destination::hugging_face("<owner>/<name>", …)`
 targets HF Storage Buckets at `https://s3.hf.co`.
 

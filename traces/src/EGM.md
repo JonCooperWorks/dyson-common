@@ -54,7 +54,7 @@ publishing.
   - `id` starts with `.`
   - `id` contains characters other than ASCII alphanumerics and `-_.`
   - the prefix contains characters other than those plus `/`
-- Signing assumes path-style requests, object keys that need no percent-encoding, no query string, and a payload hashed as a whole (module docs) [sigv4.rs]
+- `sigv4` is a thin compatibility layer over `dyson-sigv4`, fixed to service `s3`, empty query string, and whole-payload SHA-256 [sigv4.rs]
 - `Bucket::new` rejects [bucket.rs:Bucket::new]:
   - a non-https endpoint
   - a bucket name with empty, `.`, or `..` path segments, or non-plain characters

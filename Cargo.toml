@@ -43,7 +43,7 @@ oidc = ["dep:jsonwebtoken"]
 glitch-scope = ["dep:ipnet", "dep:sha2", "dep:thiserror", "url/serde", "dep:uuid"]
 
 [workspace]
-members = ["telegram", "inference-protocol", "secrets", "traces", "services", "cloudflare"]
+members = ["telegram", "inference-protocol", "secrets", "sigv4", "traces", "services", "cloudflare"]
 resolver = "2"
 
 # Kingfisher (dyson-secrets' `kingfisher` feature) builds against its vendored

@@ -1,0 +1,18 @@
+[package]
+name = "dyson-sigv4"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Pure AWS Signature Version 4 signing and presigning for S3 and compatible services."
+repository = "https://github.com/JonCooperWorks/dyson-common"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+hex = "0.4"
+hmac = "0.12"
+sha2 = "0.10"
+
+[dev-dependencies]
+jiff = { version = "0.2", default-features = false, features = ["std"] }
+rusty-s3 = { version = "0.10", default-features = false, features = ["rustcrypto"] }
+url = "2"
