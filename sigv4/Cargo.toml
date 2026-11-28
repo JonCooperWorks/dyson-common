@@ -11,6 +11,8 @@ chrono = { version = "0.4", default-features = false, features = ["std"] }
 hex = "0.4"
 hmac = "0.12"
 sha2 = "0.10"
+# Wipes the secret and the keys derived from it once a signature is made.
+zeroize = "1"
 
 [dev-dependencies]
 jiff = { version = "0.2", default-features = false, features = ["std"] }

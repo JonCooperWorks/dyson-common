@@ -30,7 +30,9 @@
 //!   of ASCII spaces collapsed to a single space. Duplicate header names are
 //!   joined with `','` in input order. `host` is always required.
 //! - **Secrets never leak:** [`Credentials`]'s [`fmt::Debug`] redacts
-//!   `secret_access_key`, and [`Error`] carries no input values.
+//!   `secret_access_key`, and [`Error`] carries no input values. The secret is
+//!   wiped when [`Credentials`] is dropped, and the keys derived from it are
+//!   wiped as soon as a signature is made.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -569,16 +571,26 @@ fn sign_canonical_request(
     let hashed_request = hex::encode(Sha256::digest(canonical_request.as_bytes()));
     let string_to_sign = format!("{ALGORITHM}\n{stamp}\n{scope}\n{hashed_request}");
 
-    let mut initial_key = Vec::with_capacity(4 + credentials.secret_access_key.len());
+    // The secret and every key derived from it are wiped before returning;
+    // only the signature leaves this function.
+    let mut initial_key =
+        zeroize::Zeroizing::new(Vec::with_capacity(4 + credentials.secret_access_key.len()));
     initial_key.extend_from_slice(b"AWS4");
     initial_key.extend_from_slice(credentials.secret_access_key.as_bytes());
 
-    let k_date = hmac_sha256(&initial_key, date_stamp.as_bytes());
-    let k_region = hmac_sha256(&k_date, credentials.region.as_bytes());
-    let k_service = hmac_sha256(&k_region, service.as_bytes());
-    let k_signing = hmac_sha256(&k_service, TERMINATOR.as_bytes());
+    let k_date = zeroize::Zeroizing::new(hmac_sha256(&initial_key, date_stamp.as_bytes()));
+    let k_region = zeroize::Zeroizing::new(hmac_sha256(&*k_date, credentials.region.as_bytes()));
+    let k_service = zeroize::Zeroizing::new(hmac_sha256(&*k_region, service.as_bytes()));
+    let k_signing = zeroize::Zeroizing::new(hmac_sha256(&*k_service, TERMINATOR.as_bytes()));
 
-    hex::encode(hmac_sha256(&k_signing, string_to_sign.as_bytes()))
+    hex::encode(hmac_sha256(&*k_signing, string_to_sign.as_bytes()))
+}
+
+impl Drop for Credentials {
+    fn drop(&mut self) {
+        use zeroize::Zeroize as _;
+        self.secret_access_key.zeroize();
+    }
 }
 
 #[cfg(test)]
